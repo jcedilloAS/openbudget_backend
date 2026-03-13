@@ -1,0 +1,105 @@
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: openbudget_db_prod
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-openbudget}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-openbudget}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+      - ./backups:/backups
+    ports:
+      - "127.0.0.1:5432:5432"  # Only accessible from localhost
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-openbudget} -d ${POSTGRES_DB:-openbudget}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - openbudget_network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # FastAPI Application
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: openbudget_api_prod
+    restart: always
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-openbudget}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-openbudget}
+      DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-20}
+      DATABASE_MAX_OVERFLOW: ${DATABASE_MAX_OVERFLOW:-10}
+      APP_NAME: ${APP_NAME:-OpenBudget API}
+      APP_VERSION: ${APP_VERSION:-1.0.0}
+      DEBUG: "False"
+      API_V1_PREFIX: ${API_V1_PREFIX:-/api/v1}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+      ALGORITHM: ${ALGORITHM:-HS256}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-["https://yourdomain.com"]}
+    ports:
+      - "8001:8001"
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "
+        echo 'Waiting for database...' &&
+        sleep 5 &&
+        echo 'Running migrations...' &&
+        alembic upgrade head &&
+        echo 'Starting production application...' &&
+        uvicorn app.main:app --host 0.0.0.0 --port 8001 --workers 4 --log-level warning
+      "
+    networks:
+      - openbudget_network
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+
+  # Nginx Reverse Proxy (optional but recommended for production)
+  nginx:
+    image: nginx:alpine
+    container_name: openbudget_nginx_prod
+    restart: always
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro  # For SSL certificates
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - api
+    networks:
+      - openbudget_network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+volumes:
+  postgres_data_prod:
+    name: openbudget_postgres_data_prod
+
+networks:
+  openbudget_network:
+    name: openbudget_network_prod
+    driver: bridge

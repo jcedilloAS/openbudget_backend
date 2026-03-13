@@ -1,0 +1,78 @@
+from fastapi import APIRouter
+from app.api.v1.endpoints import accounts, roles, users, audit_logs, projects, user_projects, auth, suppliers, catalogs, actions, catalog_actions, role_permissions, system_configuration, retentions
+
+api_router = APIRouter()
+
+# Include auth router (no authentication required)
+api_router.include_router(
+    auth.router,
+    prefix="/auth",
+    tags=["authentication"]
+)
+
+# Include all endpoint routers
+api_router.include_router(
+    accounts.router,
+    prefix="/accounts",
+    tags=["accounts"]
+)
+api_router.include_router(
+    roles.router,
+    prefix="/roles",
+    tags=["roles"]
+)
+api_router.include_router(
+    users.router,
+    prefix="/users",
+    tags=["users"]
+)
+api_router.include_router(
+    audit_logs.router,
+    prefix="/audit-logs",
+    tags=["audit-logs"]
+)
+api_router.include_router(
+    projects.router,
+    prefix="/projects",
+    tags=["projects"]
+)
+api_router.include_router(
+    user_projects.router,
+    prefix="/user-projects",
+    tags=["user-projects"]
+)
+api_router.include_router(
+    suppliers.router,
+    prefix="/suppliers",
+    tags=["suppliers"]
+)
+api_router.include_router(
+    catalogs.router,
+    prefix="/catalogs",
+    tags=["catalogs"]
+)
+api_router.include_router(
+    actions.router,
+    prefix="/actions",
+    tags=["actions"]
+)
+api_router.include_router(
+    catalog_actions.router,
+    prefix="/catalog-actions",
+    tags=["catalog-actions"]
+)
+api_router.include_router(
+    role_permissions.router,
+    prefix="/role-permissions",
+    tags=["role-permissions"]
+)
+api_router.include_router(
+    system_configuration.router,
+    prefix="/system-configuration",
+    tags=["system-configuration"]
+)
+api_router.include_router(
+    retentions.router,
+    prefix="/retentions",
+    tags=["retentions"]
+)
