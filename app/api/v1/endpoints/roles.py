@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_active_user
+from app.core.dependencies import require_permission
 from app.models.user import User
 from app.crud.role import role
 from app.schemas.role import Role, RoleCreate, RoleUpdate, RoleList, RoleWithPermissions
@@ -18,7 +18,7 @@ def list_roles(
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("roles", "read"))
 ):
     """
     Retrieve a list of roles with pagination.
@@ -37,7 +37,7 @@ def list_roles(
 def get_role(
     role_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("roles", "read"))
 ):
     """
     Retrieve a specific role by ID.
@@ -59,7 +59,7 @@ def get_role(
 def get_role_with_permissions(
     role_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("roles", "read"))
 ):
     """
     Retrieve a specific role by ID with its assigned permissions.
@@ -82,7 +82,7 @@ def create_role(
     role_in: RoleCreate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("roles", "create"))
 ):
     """
     Create a new role.
@@ -107,7 +107,7 @@ def update_role(
     role_in: RoleUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("roles", "update"))
 ):
     """
     Update an existing role.
@@ -142,7 +142,7 @@ def delete_role(
     soft: bool = Query(False, description="Perform soft delete (set is_active=False)"),
     request: Request = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("roles", "delete"))
 ):
     """
     Delete a role.

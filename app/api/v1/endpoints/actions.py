@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_active_user
+from app.core.dependencies import require_permission
 from app.models.user import User
 from app.crud.action import action
 from app.schemas.action import Action, ActionCreate, ActionUpdate, ActionList
@@ -18,7 +18,7 @@ def list_actions(
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("actions", "read"))
 ):
     """
     Retrieve a list of actions with pagination.
@@ -37,7 +37,7 @@ def list_actions(
 def get_action(
     action_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("actions", "read"))
 ):
     """
     Retrieve a specific action by ID.
@@ -60,7 +60,7 @@ def create_action(
     action_in: ActionCreate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("actions", "create"))
 ):
     """
     Create a new action.
@@ -85,7 +85,7 @@ def update_action(
     action_in: ActionUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("actions", "update"))
 ):
     """
     Update an existing action.
@@ -120,7 +120,7 @@ def delete_action(
     soft: bool = Query(False, description="Perform soft delete (set is_active=False)"),
     request: Request = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("actions", "delete"))
 ):
     """
     Delete an action.
@@ -161,7 +161,7 @@ def search_actions(
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("actions", "read"))
 ):
     """
     Search actions by action_code or action_name.

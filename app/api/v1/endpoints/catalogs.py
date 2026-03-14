@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_active_user
+from app.core.dependencies import require_permission
 from app.models.user import User
 from app.crud.catalog import catalog
 from app.schemas.catalog import Catalog, CatalogCreate, CatalogUpdate, CatalogList
@@ -18,7 +18,7 @@ def list_catalogs(
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("catalogs", "read"))
 ):
     """
     Retrieve a list of catalogs with pagination.
@@ -37,7 +37,7 @@ def list_catalogs(
 def get_catalog(
     catalog_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("catalogs", "read"))
 ):
     """
     Retrieve a specific catalog by ID.
@@ -60,7 +60,7 @@ def create_catalog(
     catalog_in: CatalogCreate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("catalogs", "create"))
 ):
     """
     Create a new catalog.
@@ -85,7 +85,7 @@ def update_catalog(
     catalog_in: CatalogUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("catalogs", "update"))
 ):
     """
     Update an existing catalog.
@@ -120,7 +120,7 @@ def delete_catalog(
     soft: bool = Query(False, description="Perform soft delete (set is_active=False)"),
     request: Request = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("catalogs", "delete"))
 ):
     """
     Delete a catalog.
@@ -161,7 +161,7 @@ def search_catalogs(
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("catalogs", "read"))
 ):
     """
     Search catalogs by catalog_code or catalog_name.

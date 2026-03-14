@@ -67,6 +67,24 @@ class UserWithRole(User):
     model_config = ConfigDict(from_attributes=True)
 
 
+class PermissionItem(BaseModel):
+    """Schema for a single permission entry."""
+    catalog_code: str
+    catalog_name: str
+    action_code: str
+    action_name: str
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UserWithPermissions(User):
+    """Schema for User response with role and all available permissions."""
+    role: Optional[RoleSimple] = None
+    permissions: list[PermissionItem] = []
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
 class UserList(BaseModel):
     """Schema for paginated User list."""
     total: int

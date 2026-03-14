@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_active_user
+from app.core.dependencies import require_permission
 from app.models.user import User
 from app.crud.audit_log import audit_log
 from app.schemas.audit_log import AuditLog, AuditLogCreate, AuditLogList, AuditLogWithUser
@@ -23,7 +23,7 @@ def list_audit_logs(
     start_date: Optional[datetime] = Query(None, description="Filter from date (ISO format)"),
     end_date: Optional[datetime] = Query(None, description="Filter to date (ISO format)"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("audit_logs", "read"))
 ):
     """
     Retrieve a list of audit logs with pagination and filtering.
@@ -65,7 +65,7 @@ def list_audit_logs(
 def get_audit_log(
     audit_log_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("audit_logs", "read"))
 ):
     """
     Retrieve a specific audit log by ID.
@@ -87,7 +87,7 @@ def get_audit_log(
 def create_audit_log(
     audit_log_in: AuditLogCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("audit_logs", "create"))
 ):
     """
     Create a new audit log entry.
@@ -109,7 +109,8 @@ def get_audit_logs_by_user(
     user_id: int,
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("audit_logs", "read"))
 ):
     """
     Retrieve all audit logs for a specific user.
@@ -129,7 +130,8 @@ def get_audit_logs_by_module(
     module: str,
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("audit_logs", "read"))
 ):
     """
     Retrieve all audit logs for a specific module.
@@ -148,7 +150,8 @@ def get_audit_logs_by_module(
 def get_recent_audit_logs(
     hours: int = Query(24, ge=1, le=720, description="Number of hours to look back"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("audit_logs", "read"))
 ):
     """
     Retrieve recent audit logs within the specified hours.
@@ -162,7 +165,8 @@ def get_recent_audit_logs(
 @router.delete("/cleanup", summary="Delete old audit logs")
 def cleanup_old_logs(
     days: int = Query(90, ge=30, le=365, description="Delete logs older than this many days"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("audit_logs", "delete"))
 ):
     """
     Delete audit logs older than specified days.

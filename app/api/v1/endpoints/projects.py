@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from decimal import Decimal
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_active_user
+from app.core.dependencies import require_permission
 from app.models.user import User
 from app.crud.project import project
 from app.schemas.project import (
@@ -28,7 +28,7 @@ def list_projects(
     status: Optional[str] = Query(None, description="Filter by status"),
     created_by: Optional[int] = Query(None, description="Filter by creator user ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("projects", "read"))
 ):
     """
     Retrieve a list of projects with pagination.
@@ -48,7 +48,7 @@ def list_projects(
 def get_projects_summary(
     status: Optional[str] = Query(None, description="Filter by status"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("projects", "read"))
 ):
     """
     Get budget summary for all projects or filtered by status.
@@ -64,7 +64,7 @@ def get_projects_summary(
 def get_project(
     project_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("projects", "read"))
 ):
     """
     Retrieve a specific project by ID.
@@ -86,7 +86,7 @@ def get_project(
 def get_project_with_members(
     project_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("projects", "read"))
 ):
     """
     Retrieve a specific project by ID with all assigned team members.
@@ -108,7 +108,7 @@ def get_project_with_members(
 def get_project_by_code(
     project_code: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("projects", "read"))
 ):
     """
     Retrieve a specific project by project code.
@@ -131,7 +131,7 @@ def create_project(
     project_in: ProjectCreate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("projects", "create"))
 ):
     """
     Create a new project.
@@ -162,7 +162,7 @@ def update_project(
     project_in: ProjectUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("projects", "update"))
 ):
     """
     Update an existing project.
@@ -206,7 +206,7 @@ def update_project_budget(
     spent: Optional[Decimal] = Query(None, description="New spent amount"),
     updated_by: int = Query(..., description="User ID updating the budget"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("projects", "update"))
 ):
     """
     Update project budget fields and automatically recalculate available balance.
@@ -242,7 +242,7 @@ def delete_project(
     project_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("projects", "delete"))
 ):
     """
     Delete a project.
@@ -272,7 +272,7 @@ def get_projects_by_status(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("projects", "read"))
 ):
     """
     Retrieve projects filtered by status.

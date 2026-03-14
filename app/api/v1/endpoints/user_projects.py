@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_active_user
+from app.core.dependencies import require_permission
 from app.models.user import User
 from app.crud.user_project import crud_user_project
 from app.schemas.user_project import (
@@ -21,7 +21,7 @@ def get_user_projects(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("user_projects", "read"))
 ):
     """
     Get all user-project associations with pagination.
@@ -35,7 +35,7 @@ def get_user_projects(
 def get_user_project(
     user_project_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("user_projects", "read"))
 ):
     """
     Get a specific user-project association by ID.
@@ -55,7 +55,7 @@ def get_projects_by_user(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("user_projects", "read"))
 ):
     """
     Get all projects associated with a specific user.
@@ -71,7 +71,7 @@ def get_users_by_project(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("user_projects", "read"))
 ):
     """
     Get all users associated with a specific project.
@@ -86,7 +86,7 @@ def create_user_project(
     user_project_in: UserProjectCreate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("user_projects", "create"))
 ):
     """
     Create a new user-project association.
@@ -105,7 +105,7 @@ def delete_user_project(
     user_project_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("user_projects", "delete"))
 ):
     """
     Delete a user-project association by ID.
@@ -131,7 +131,7 @@ def delete_user_project_association(
     project_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("user_projects", "delete"))
 ):
     """
     Delete a user-project association by user_id and project_id.
@@ -157,7 +157,7 @@ def delete_all_user_projects(
     user_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("user_projects", "delete"))
 ):
     """
     Delete all project associations for a user.
@@ -177,7 +177,7 @@ def delete_all_project_users(
     project_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("user_projects", "delete"))
 ):
     """
     Delete all user associations for a project.

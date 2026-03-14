@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_active_user
+from app.core.dependencies import require_permission
 from app.models.user import User
 from app.crud.account import account
 from app.schemas.account import Account, AccountCreate, AccountUpdate, AccountList
@@ -18,7 +18,7 @@ def list_accounts(
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("accounts", "read"))
 ):
     """
     Retrieve a list of accounts with pagination.
@@ -37,7 +37,7 @@ def list_accounts(
 def get_account(
     account_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("accounts", "read"))
 ):
     """
     Retrieve a specific account by ID.
@@ -60,7 +60,7 @@ def create_account(
     account_in: AccountCreate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("accounts", "create"))
 ):
     """
     Create a new account.
@@ -84,7 +84,7 @@ def update_account(
     account_in: AccountUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("accounts", "update"))
 ):
     """
     Update an existing account.
@@ -118,7 +118,7 @@ def delete_account(
     soft: bool = Query(False, description="Perform soft delete (set is_active=False)"),
     request: Request = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("accounts", "delete"))
 ):
     """
     Delete an account.

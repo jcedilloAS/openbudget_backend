@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_active_user
+from app.core.dependencies import require_permission
 from app.models.user import User
 from app.crud.catalog_action import catalog_action
 from app.schemas.catalog_action import (
@@ -26,7 +26,7 @@ def list_catalog_actions(
     action_id: Optional[int] = Query(None, description="Filter by action ID"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("catalog_actions", "read"))
 ):
     """
     Retrieve a list of catalog-actions with pagination.
@@ -58,7 +58,7 @@ def list_catalog_actions_with_details(
     action_id: Optional[int] = Query(None, description="Filter by action ID"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("catalog_actions", "read"))
 ):
     """
     Retrieve a list of catalog-actions with catalog and action details.
@@ -86,7 +86,7 @@ def list_catalog_actions_with_details(
 def get_catalog_action(
     catalog_action_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("catalog_actions", "read"))
 ):
     """
     Retrieve a specific catalog-action by ID.
@@ -109,7 +109,7 @@ def create_catalog_action(
     catalog_action_in: CatalogActionCreate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("catalog_actions", "create"))
 ):
     """
     Create a new catalog-action relationship.
@@ -133,7 +133,7 @@ def update_catalog_action(
     catalog_action_in: CatalogActionUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("catalog_actions", "update"))
 ):
     """
     Update an existing catalog-action.
@@ -165,7 +165,7 @@ def delete_catalog_action(
     soft: bool = Query(False, description="Perform soft delete (set is_active=False)"),
     request: Request = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("catalog_actions", "delete"))
 ):
     """
     Delete a catalog-action.

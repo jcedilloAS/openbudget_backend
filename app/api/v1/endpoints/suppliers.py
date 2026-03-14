@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_active_user
+from app.core.dependencies import require_permission
 from app.models.user import User
 from app.crud.supplier import supplier
 from app.schemas.supplier import (
@@ -24,7 +24,7 @@ def list_suppliers(
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     created_by: Optional[int] = Query(None, description="Filter by creator user ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("suppliers", "read"))
 ):
     """
     Retrieve a list of suppliers with pagination.
@@ -46,7 +46,7 @@ def search_suppliers(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("suppliers", "read"))
 ):
     """
     Search suppliers by name, supplier code, or RFC.
@@ -63,7 +63,7 @@ def search_suppliers(
 def get_supplier(
     supplier_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("suppliers", "read"))
 ):
     """
     Retrieve a specific supplier by ID.
@@ -85,7 +85,7 @@ def get_supplier(
 def get_supplier_by_code(
     supplier_code: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("suppliers", "read"))
 ):
     """
     Retrieve a specific supplier by supplier code.
@@ -107,7 +107,7 @@ def get_supplier_by_code(
 def create_supplier(
     supplier_in: SupplierCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("suppliers", "create"))
 ):
     """
     Create a new supplier.
@@ -137,7 +137,7 @@ def update_supplier(
     supplier_id: int,
     supplier_in: SupplierUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("suppliers", "update"))
 ):
     """
     Update an existing supplier.
@@ -161,7 +161,7 @@ def delete_supplier(
     supplier_id: int,
     soft: bool = Query(False, description="Perform soft delete (set is_active=False)"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("suppliers", "delete"))
 ):
     """
     Delete a supplier.

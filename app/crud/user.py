@@ -255,7 +255,7 @@ class CRUDUser:
         if not db_user:
             return None
         
-        db_user.last_login_at = datetime.utcnow()
+        db_user.last_login_at = datetime.now()
         db.commit()
         db.refresh(db_user)
         return db_user

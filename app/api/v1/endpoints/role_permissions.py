@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_active_user
+from app.core.dependencies import require_permission
 from app.models.user import User
 from app.crud.role_permission import role_permission
 from app.schemas.role_permission import (
@@ -27,7 +27,7 @@ def list_role_permissions(
     catalog_action_id: Optional[int] = Query(None, description="Filter by catalog-action ID"),
     is_allowed: Optional[bool] = Query(None, description="Filter by allowed status"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("role_permissions", "read"))
 ):
     """
     Retrieve a list of role permissions with pagination.
@@ -59,7 +59,7 @@ def list_role_permissions_with_details(
     catalog_action_id: Optional[int] = Query(None, description="Filter by catalog-action ID"),
     is_allowed: Optional[bool] = Query(None, description="Filter by allowed status"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("role_permissions", "read"))
 ):
     """
     Retrieve a list of role permissions with role, catalog and action details.
@@ -87,7 +87,7 @@ def list_role_permissions_with_details(
 def get_role_permission(
     role_permission_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("role_permissions", "read"))
 ):
     """
     Retrieve a specific role permission by ID.
@@ -110,7 +110,7 @@ def create_role_permission(
     role_permission_in: RolePermissionCreate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("role_permissions", "create"))
 ):
     """
     Create a new role permission.
@@ -133,7 +133,7 @@ def bulk_create_role_permissions(
     bulk_data: RolePermissionBulkCreate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("role_permissions", "create"))
 ):
     """
     Bulk create role permissions for a role.
@@ -157,7 +157,7 @@ def update_role_permission(
     role_permission_in: RolePermissionUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("role_permissions", "update"))
 ):
     """
     Update an existing role permission.
@@ -188,7 +188,7 @@ def delete_role_permission(
     role_permission_id: int,
     request: Request = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("role_permissions", "delete"))
 ):
     """
     Delete a role permission.

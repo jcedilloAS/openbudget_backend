@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_active_user
+from app.core.dependencies import require_permission
 from app.models.user import User
 from app.crud.system_configuration import system_configuration
 from app.schemas.system_configuration import (
@@ -19,7 +19,7 @@ router = APIRouter()
 @router.get("/", response_model=SystemConfiguration, summary="Get system configuration")
 def get_system_configuration(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("system_configuration", "read"))
 ):
     """
     Retrieve the active system configuration.
@@ -40,7 +40,7 @@ def get_system_configuration(
 @router.get("/with-password", response_model=SystemConfigurationWithPassword, summary="Get system configuration with password")
 def get_system_configuration_with_password(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("system_configuration", "read"))
 ):
     """
     Retrieve the active system configuration including sensitive data.
@@ -88,7 +88,7 @@ def get_system_configuration_with_password(
 def get_configuration_by_id(
     config_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("system_configuration", "read"))
 ):
     """
     Retrieve a specific system configuration by ID.
@@ -111,7 +111,7 @@ def create_or_update_system_configuration(
     config_in: SystemConfigurationCreate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("system_configuration", "create"))
 ):
     """
     Create or update the system configuration (upsert).
@@ -142,7 +142,7 @@ def update_system_configuration(
     config_in: SystemConfigurationUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_permission("system_configuration", "update"))
 ):
     """
     Update an existing system configuration.

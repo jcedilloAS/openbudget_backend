@@ -16,9 +16,10 @@ from app.core.security import (
     decode_token
 )
 from app.core.config import settings
-from app.core.dependencies import get_current_user_from_cookie
+from app.core.dependencies import get_current_user_from_cookie, get_current_user_with_permissions, get_user_permissions
 from app.models.user import User
 from app.crud.user import user as user_crud
+from app.schemas.user import UserWithPermissions, PermissionItem
 
 router = APIRouter()
 
@@ -36,6 +37,7 @@ class LoginResponse(BaseModel):
     refresh_token: str
     token_type: str
     user: dict
+    permissions: list[PermissionItem]
 
 
 class RefreshResponse(BaseModel):
@@ -46,17 +48,6 @@ class RefreshResponse(BaseModel):
 class LogoutResponse(BaseModel):
     """Logout response schema."""
     message: str
-
-
-class MeResponse(BaseModel):
-    """Current user response schema."""
-    id: int
-    username: str
-    name: str
-    email: str
-    is_active: bool
-    created_at: datetime
-    role: dict
 
 
 @router.post("/login", response_model=LoginResponse)
@@ -103,6 +94,8 @@ def login(
     # Update last login timestamp
     user_crud.update_last_login(db, user_id=db_user.id)
     
+    permissions = get_user_permissions(db, db_user.role_id, is_superuser=bool(db_user.is_superuser))
+    
     return LoginResponse(
         message="Login successful",
         access_token=access_token,
@@ -119,7 +112,8 @@ def login(
                 "role_code": db_user.role.role_code,
                 "name": db_user.role.name
             }
-        }
+        },
+        permissions=permissions
     )
 
 
@@ -214,27 +208,14 @@ def logout(response: Response):
     return LogoutResponse(message="Logout successful")
 
 
-@router.get("/me", response_model=MeResponse)
+@router.get("/me", response_model=UserWithPermissions)
 def get_current_user_info(
-    current_user: User = Depends(get_current_user_from_cookie)
+    user_with_permissions: UserWithPermissions = Depends(get_current_user_with_permissions),
 ):
     """
-    Get current authenticated user information.
+    Get current authenticated user information with all available permissions.
     
-    - Requires valid access token in cookie
-    - Returns user details and role
+    - Requires valid access token in cookie or Authorization header
+    - Returns user details, role, and list of permissions
     """
-    return MeResponse(
-        id=current_user.id,
-        username=current_user.username,
-        name=current_user.name,
-        email=current_user.email,
-        is_active=current_user.is_active,
-        created_at=current_user.created_at,
-        role={
-            "id": current_user.role.id,
-            "role_code": current_user.role.role_code,
-            "name": current_user.role.name,
-            "description": current_user.role.description
-        }
-    )
+    return user_with_permissions

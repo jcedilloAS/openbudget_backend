@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_active_user
+from app.core.dependencies import require_permission
 from app.models.user import User as UserModel
 from app.crud.user import user
 from app.schemas.user import User, UserCreate, UserUpdate, UserList, UserWithRole
@@ -19,7 +19,7 @@ def list_users(
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     role_id: Optional[int] = Query(None, description="Filter by role ID"),
     db: Session = Depends(get_db),
-    current_user: UserModel = Depends(get_current_active_user)
+    current_user: UserModel = Depends(require_permission("users", "read"))
 ):
     """
     Retrieve a list of users with pagination.
@@ -39,7 +39,7 @@ def list_users(
 def get_user(
     user_id: int,
     db: Session = Depends(get_db),
-    current_user: UserModel = Depends(get_current_active_user)
+    current_user: UserModel = Depends(require_permission("users", "read"))
 ):
     """
     Retrieve a specific user by ID.
@@ -62,7 +62,7 @@ def create_user(
     user_in: UserCreate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: UserModel = Depends(get_current_active_user)
+    current_user: UserModel = Depends(require_permission("users", "create"))
 ):
     """
     Create a new user.
@@ -89,7 +89,7 @@ def update_user(
     user_in: UserUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: UserModel = Depends(get_current_active_user)
+    current_user: UserModel = Depends(require_permission("users", "update"))
 ):
     """
     Update an existing user.
@@ -126,7 +126,7 @@ def delete_user(
     soft: bool = Query(False, description="Perform soft delete (set is_active=False)"),
     request: Request = None,
     db: Session = Depends(get_db),
-    current_user: UserModel = Depends(get_current_active_user)
+    current_user: UserModel = Depends(require_permission("users", "delete"))
 ):
     """
     Delete a user.
@@ -164,7 +164,7 @@ def delete_user(
 def get_user_by_username(
     username: str,
     db: Session = Depends(get_db),
-    current_user: UserModel = Depends(get_current_active_user)
+    current_user: UserModel = Depends(require_permission("users", "read"))
 ):
     """
     Retrieve a specific user by username.
@@ -186,7 +186,7 @@ def get_user_by_username(
 def get_user_by_email(
     email: str,
     db: Session = Depends(get_db),
-    current_user: UserModel = Depends(get_current_active_user)
+    current_user: UserModel = Depends(require_permission("users", "read"))
 ):
     """
     Retrieve a specific user by email.
