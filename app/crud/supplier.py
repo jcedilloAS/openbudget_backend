@@ -54,7 +54,7 @@ class CRUDSupplier:
         
         return query.count()
     
-    def create(self, db: Session, supplier_in: SupplierCreate) -> Supplier:
+    def create(self, db: Session, supplier_in: SupplierCreate, user_id: int) -> Supplier:
         """Create a new supplier."""
         # Check if supplier code already exists
         existing_supplier = self.get_by_supplier_code(db, supplier_in.supplier_code)
@@ -68,9 +68,7 @@ class CRUDSupplier:
             supplier_code=supplier_in.supplier_code,
             name=supplier_in.name,
             rfc=supplier_in.rfc,
-            contact_name=supplier_in.contact_name,
-            contact_email=supplier_in.contact_email,
-            contact_phone=supplier_in.contact_phone,
+            phone=supplier_in.phone,
             address=supplier_in.address,
             postal_code=supplier_in.postal_code,
             city=supplier_in.city,
@@ -79,8 +77,8 @@ class CRUDSupplier:
             percentage_iva=supplier_in.percentage_iva,
             delivery_time_days=supplier_in.delivery_time_days,
             is_active=supplier_in.is_active,
-            created_by=supplier_in.created_by,
-            updated_by=supplier_in.updated_by
+            created_by=user_id,
+            updated_by=user_id
         )
         
         try:
@@ -99,7 +97,8 @@ class CRUDSupplier:
         self, 
         db: Session, 
         supplier_id: int, 
-        supplier_in: SupplierUpdate
+        supplier_in: SupplierUpdate,
+        user_id: int
     ) -> Optional[Supplier]:
         """Update an existing supplier."""
         db_supplier = self.get(db, supplier_id)
@@ -118,6 +117,7 @@ class CRUDSupplier:
         
         # Update only provided fields
         update_data = supplier_in.model_dump(exclude_unset=True)
+        update_data["updated_by"] = user_id
         
         for field, value in update_data.items():
             setattr(db_supplier, field, value)

@@ -28,7 +28,7 @@ def list_projects(
     status: Optional[str] = Query(None, description="Filter by status"),
     created_by: Optional[int] = Query(None, description="Filter by creator user ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("projects", "read"))
+    current_user: User = Depends(require_permission("projects", "list"))
 ):
     """
     Retrieve a list of projects with pagination.
@@ -48,7 +48,7 @@ def list_projects(
 def get_projects_summary(
     status: Optional[str] = Query(None, description="Filter by status"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("projects", "read"))
+    current_user: User = Depends(require_permission("projects", "list"))
 ):
     """
     Get budget summary for all projects or filtered by status.
@@ -64,7 +64,7 @@ def get_projects_summary(
 def get_project(
     project_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("projects", "read"))
+    current_user: User = Depends(require_permission("projects", "list"))
 ):
     """
     Retrieve a specific project by ID.
@@ -86,7 +86,7 @@ def get_project(
 def get_project_with_members(
     project_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("projects", "read"))
+    current_user: User = Depends(require_permission("projects", "list"))
 ):
     """
     Retrieve a specific project by ID with all assigned team members.
@@ -108,7 +108,7 @@ def get_project_with_members(
 def get_project_by_code(
     project_code: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("projects", "read"))
+    current_user: User = Depends(require_permission("projects", "list"))
 ):
     """
     Retrieve a specific project by project code.
@@ -272,7 +272,7 @@ def get_projects_by_status(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("projects", "read"))
+    current_user: User = Depends(require_permission("projects", "list"))
 ):
     """
     Retrieve projects filtered by status.

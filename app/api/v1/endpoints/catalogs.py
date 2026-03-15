@@ -18,7 +18,7 @@ def list_catalogs(
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("catalogs", "read"))
+    current_user: User = Depends(require_permission("catalogs", "list"))
 ):
     """
     Retrieve a list of catalogs with pagination.
@@ -37,7 +37,7 @@ def list_catalogs(
 def get_catalog(
     catalog_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("catalogs", "read"))
+    current_user: User = Depends(require_permission("catalogs", "list"))
 ):
     """
     Retrieve a specific catalog by ID.
@@ -161,7 +161,7 @@ def search_catalogs(
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("catalogs", "read"))
+    current_user: User = Depends(require_permission("catalogs", "list"))
 ):
     """
     Search catalogs by catalog_code or catalog_name.

@@ -26,7 +26,7 @@ def list_catalog_actions(
     action_id: Optional[int] = Query(None, description="Filter by action ID"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("catalog_actions", "read"))
+    current_user: User = Depends(require_permission("catalog_actions", "list"))
 ):
     """
     Retrieve a list of catalog-actions with pagination.
@@ -58,7 +58,7 @@ def list_catalog_actions_with_details(
     action_id: Optional[int] = Query(None, description="Filter by action ID"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("catalog_actions", "read"))
+    current_user: User = Depends(require_permission("catalog_actions", "list"))
 ):
     """
     Retrieve a list of catalog-actions with catalog and action details.
@@ -86,7 +86,7 @@ def list_catalog_actions_with_details(
 def get_catalog_action(
     catalog_action_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("catalog_actions", "read"))
+    current_user: User = Depends(require_permission("catalog_actions", "list"))
 ):
     """
     Retrieve a specific catalog-action by ID.

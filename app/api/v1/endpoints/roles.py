@@ -18,7 +18,7 @@ def list_roles(
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("roles", "read"))
+    current_user: User = Depends(require_permission("roles", "list"))
 ):
     """
     Retrieve a list of roles with pagination.
@@ -37,7 +37,7 @@ def list_roles(
 def get_role(
     role_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("roles", "read"))
+    current_user: User = Depends(require_permission("roles", "list"))
 ):
     """
     Retrieve a specific role by ID.
@@ -59,7 +59,7 @@ def get_role(
 def get_role_with_permissions(
     role_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("roles", "read"))
+    current_user: User = Depends(require_permission("roles", "list"))
 ):
     """
     Retrieve a specific role by ID with its assigned permissions.

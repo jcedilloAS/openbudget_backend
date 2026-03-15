@@ -5,6 +5,7 @@ from app.crud.audit_log import audit_log
 from app.crud.project import project
 from app.crud.user_project import crud_user_project
 from app.crud.supplier import supplier
+from app.crud.supplier_document import supplier_document
 from app.crud.catalog import catalog
 from app.crud.action import action
 from app.crud.catalog_action import catalog_action
@@ -12,4 +13,4 @@ from app.crud.role_permission import role_permission
 from app.crud.system_configuration import system_configuration
 from app.crud.retention import retention
 
-__all__ = ["account", "role", "user", "audit_log", "project", "crud_user_project", "supplier", "catalog", "action", "catalog_action", "role_permission", "system_configuration", "retention"]
+__all__ = ["account", "role", "user", "audit_log", "project", "crud_user_project", "supplier", "supplier_document", "catalog", "action", "catalog_action", "role_permission", "system_configuration", "retention"]

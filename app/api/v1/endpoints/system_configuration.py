@@ -19,7 +19,7 @@ router = APIRouter()
 @router.get("/", response_model=SystemConfiguration, summary="Get system configuration")
 def get_system_configuration(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("system_configuration", "read"))
+    current_user: User = Depends(require_permission("system_configuration", "list"))
 ):
     """
     Retrieve the active system configuration.
@@ -40,7 +40,7 @@ def get_system_configuration(
 @router.get("/with-password", response_model=SystemConfigurationWithPassword, summary="Get system configuration with password")
 def get_system_configuration_with_password(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("system_configuration", "read"))
+    current_user: User = Depends(require_permission("system_configuration", "list"))
 ):
     """
     Retrieve the active system configuration including sensitive data.
@@ -88,7 +88,7 @@ def get_system_configuration_with_password(
 def get_configuration_by_id(
     config_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("system_configuration", "read"))
+    current_user: User = Depends(require_permission("system_configuration", "list"))
 ):
     """
     Retrieve a specific system configuration by ID.

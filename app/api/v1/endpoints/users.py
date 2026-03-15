@@ -19,7 +19,7 @@ def list_users(
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     role_id: Optional[int] = Query(None, description="Filter by role ID"),
     db: Session = Depends(get_db),
-    current_user: UserModel = Depends(require_permission("users", "read"))
+    current_user: UserModel = Depends(require_permission("users", "list"))
 ):
     """
     Retrieve a list of users with pagination.
@@ -39,7 +39,7 @@ def list_users(
 def get_user(
     user_id: int,
     db: Session = Depends(get_db),
-    current_user: UserModel = Depends(require_permission("users", "read"))
+    current_user: UserModel = Depends(require_permission("users", "list"))
 ):
     """
     Retrieve a specific user by ID.
@@ -164,7 +164,7 @@ def delete_user(
 def get_user_by_username(
     username: str,
     db: Session = Depends(get_db),
-    current_user: UserModel = Depends(require_permission("users", "read"))
+    current_user: UserModel = Depends(require_permission("users", "list"))
 ):
     """
     Retrieve a specific user by username.
@@ -186,7 +186,7 @@ def get_user_by_username(
 def get_user_by_email(
     email: str,
     db: Session = Depends(get_db),
-    current_user: UserModel = Depends(require_permission("users", "read"))
+    current_user: UserModel = Depends(require_permission("users", "list"))
 ):
     """
     Retrieve a specific user by email.

@@ -13,9 +13,7 @@ class Supplier(Base):
     supplier_code = Column(String(50), unique=True, index=True, nullable=False)
     name = Column(String(200), nullable=False)
     rfc = Column(String(13), nullable=True)
-    contact_name = Column(String(150), nullable=True)
-    contact_email = Column(String(255), nullable=True)
-    contact_phone = Column(String(20), nullable=True)
+    phone = Column(String(20), nullable=True)
     address = Column(String(500), nullable=True)
     postal_code = Column(String(10), nullable=True)
     city = Column(String(100), nullable=True)
@@ -32,6 +30,7 @@ class Supplier(Base):
     # Relationships
     creator = relationship("User", foreign_keys=[created_by], backref="created_suppliers")
     updater = relationship("User", foreign_keys=[updated_by], backref="updated_suppliers")
+    documents = relationship("SupplierDocument", back_populates="supplier", cascade="all, delete-orphan")
     
     def __repr__(self):
         return f"<Supplier(id={self.id}, supplier_code='{self.supplier_code}', name='{self.name}')>"

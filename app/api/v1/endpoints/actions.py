@@ -18,7 +18,7 @@ def list_actions(
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("actions", "read"))
+    current_user: User = Depends(require_permission("actions", "list"))
 ):
     """
     Retrieve a list of actions with pagination.
@@ -37,7 +37,7 @@ def list_actions(
 def get_action(
     action_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("actions", "read"))
+    current_user: User = Depends(require_permission("actions", "list"))
 ):
     """
     Retrieve a specific action by ID.
@@ -161,7 +161,7 @@ def search_actions(
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("actions", "read"))
+    current_user: User = Depends(require_permission("actions", "list"))
 ):
     """
     Search actions by action_code or action_name.

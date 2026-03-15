@@ -27,7 +27,7 @@ def list_role_permissions(
     catalog_action_id: Optional[int] = Query(None, description="Filter by catalog-action ID"),
     is_allowed: Optional[bool] = Query(None, description="Filter by allowed status"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("role_permissions", "read"))
+    current_user: User = Depends(require_permission("role_permissions", "list"))
 ):
     """
     Retrieve a list of role permissions with pagination.
@@ -59,7 +59,7 @@ def list_role_permissions_with_details(
     catalog_action_id: Optional[int] = Query(None, description="Filter by catalog-action ID"),
     is_allowed: Optional[bool] = Query(None, description="Filter by allowed status"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("role_permissions", "read"))
+    current_user: User = Depends(require_permission("role_permissions", "list"))
 ):
     """
     Retrieve a list of role permissions with role, catalog and action details.
@@ -87,7 +87,7 @@ def list_role_permissions_with_details(
 def get_role_permission(
     role_permission_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("role_permissions", "read"))
+    current_user: User = Depends(require_permission("role_permissions", "list"))
 ):
     """
     Retrieve a specific role permission by ID.

@@ -52,7 +52,15 @@ from app.schemas.supplier import (
     SupplierUpdate,
     SupplierInDB,
     SupplierList,
-    SupplierWithUsers
+    SupplierWithUsers,
+    SupplierWithDocuments
+)
+from app.schemas.supplier_document import (
+    SupplierDocument,
+    SupplierDocumentCreate,
+    SupplierDocumentUpdate,
+    SupplierDocumentInDB,
+    SupplierDocumentList
 )
 from app.schemas.catalog import (
     Catalog,
@@ -145,6 +153,12 @@ __all__ = [
     "SupplierInDB",
     "SupplierList",
     "SupplierWithUsers",
+    "SupplierWithDocuments",
+    "SupplierDocument",
+    "SupplierDocumentCreate",
+    "SupplierDocumentUpdate",
+    "SupplierDocumentInDB",
+    "SupplierDocumentList",
     "Catalog",
     "CatalogCreate",
     "CatalogUpdate",

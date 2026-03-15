@@ -18,7 +18,7 @@ def list_accounts(
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("accounts", "read"))
+    current_user: User = Depends(require_permission("accounts", "list"))
 ):
     """
     Retrieve a list of accounts with pagination.
@@ -37,7 +37,7 @@ def list_accounts(
 def get_account(
     account_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("accounts", "read"))
+    current_user: User = Depends(require_permission("accounts", "list"))
 ):
     """
     Retrieve a specific account by ID.

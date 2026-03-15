@@ -21,7 +21,7 @@ def get_user_projects(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("user_projects", "read"))
+    current_user: User = Depends(require_permission("user_projects", "list"))
 ):
     """
     Get all user-project associations with pagination.
@@ -35,7 +35,7 @@ def get_user_projects(
 def get_user_project(
     user_project_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("user_projects", "read"))
+    current_user: User = Depends(require_permission("user_projects", "list"))
 ):
     """
     Get a specific user-project association by ID.
@@ -55,7 +55,7 @@ def get_projects_by_user(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("user_projects", "read"))
+    current_user: User = Depends(require_permission("user_projects", "list"))
 ):
     """
     Get all projects associated with a specific user.
@@ -71,7 +71,7 @@ def get_users_by_project(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("user_projects", "read"))
+    current_user: User = Depends(require_permission("user_projects", "list"))
 ):
     """
     Get all users associated with a specific project.

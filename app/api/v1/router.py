@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import accounts, roles, users, audit_logs, projects, user_projects, auth, suppliers, catalogs, actions, catalog_actions, role_permissions, system_configuration, retentions
+from app.api.v1.endpoints import accounts, roles, users, audit_logs, projects, user_projects, auth, suppliers, supplier_documents, catalogs, actions, catalog_actions, role_permissions, system_configuration, retentions
 
 api_router = APIRouter()
 
@@ -45,6 +45,11 @@ api_router.include_router(
     suppliers.router,
     prefix="/suppliers",
     tags=["suppliers"]
+)
+api_router.include_router(
+    supplier_documents.router,
+    prefix="/supplier-documents",
+    tags=["supplier-documents"]
 )
 api_router.include_router(
     catalogs.router,

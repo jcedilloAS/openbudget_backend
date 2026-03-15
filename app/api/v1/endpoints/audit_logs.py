@@ -23,7 +23,7 @@ def list_audit_logs(
     start_date: Optional[datetime] = Query(None, description="Filter from date (ISO format)"),
     end_date: Optional[datetime] = Query(None, description="Filter to date (ISO format)"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("audit_logs", "read"))
+    current_user: User = Depends(require_permission("audit_logs", "list"))
 ):
     """
     Retrieve a list of audit logs with pagination and filtering.
@@ -65,7 +65,7 @@ def list_audit_logs(
 def get_audit_log(
     audit_log_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("audit_logs", "read"))
+    current_user: User = Depends(require_permission("audit_logs", "list"))
 ):
     """
     Retrieve a specific audit log by ID.
@@ -110,7 +110,7 @@ def get_audit_logs_by_user(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("audit_logs", "read"))
+    current_user: User = Depends(require_permission("audit_logs", "list"))
 ):
     """
     Retrieve all audit logs for a specific user.
@@ -131,7 +131,7 @@ def get_audit_logs_by_module(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("audit_logs", "read"))
+    current_user: User = Depends(require_permission("audit_logs", "list"))
 ):
     """
     Retrieve all audit logs for a specific module.
@@ -151,7 +151,7 @@ def get_recent_audit_logs(
     hours: int = Query(24, ge=1, le=720, description="Number of hours to look back"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("audit_logs", "read"))
+    current_user: User = Depends(require_permission("audit_logs", "list"))
 ):
     """
     Retrieve recent audit logs within the specified hours.

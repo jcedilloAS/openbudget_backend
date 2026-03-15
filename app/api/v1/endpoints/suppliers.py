@@ -11,7 +11,8 @@ from app.schemas.supplier import (
     SupplierCreate,
     SupplierUpdate,
     SupplierList,
-    SupplierWithUsers
+    SupplierWithUsers,
+    SupplierWithDocuments
 )
 
 router = APIRouter()
@@ -24,7 +25,7 @@ def list_suppliers(
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     created_by: Optional[int] = Query(None, description="Filter by creator user ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("suppliers", "read"))
+    current_user: User = Depends(require_permission("suppliers", "list"))
 ):
     """
     Retrieve a list of suppliers with pagination.
@@ -46,7 +47,7 @@ def search_suppliers(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("suppliers", "read"))
+    current_user: User = Depends(require_permission("suppliers", "list"))
 ):
     """
     Search suppliers by name, supplier code, or RFC.
@@ -59,14 +60,14 @@ def search_suppliers(
     return SupplierList(total=len(suppliers), items=suppliers)
 
 
-@router.get("/{supplier_id}", response_model=SupplierWithUsers, summary="Get supplier by ID")
+@router.get("/{supplier_id}", response_model=SupplierWithDocuments, summary="Get supplier by ID")
 def get_supplier(
     supplier_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("suppliers", "read"))
+    current_user: User = Depends(require_permission("suppliers", "list"))
 ):
     """
-    Retrieve a specific supplier by ID.
+    Retrieve a specific supplier by ID, including its documents.
     
     - **supplier_id**: The ID of the supplier to retrieve
     """
@@ -81,11 +82,11 @@ def get_supplier(
     return db_supplier
 
 
-@router.get("/code/{supplier_code}", response_model=Supplier, summary="Get supplier by code")
+@router.get("/code/{supplier_code}", response_model=SupplierWithDocuments, summary="Get supplier by code")
 def get_supplier_by_code(
     supplier_code: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("suppliers", "read"))
+    current_user: User = Depends(require_permission("suppliers", "list"))
 ):
     """
     Retrieve a specific supplier by supplier code.
@@ -115,9 +116,7 @@ def create_supplier(
     - **supplier_code**: Unique supplier code (required)
     - **name**: Supplier name (required)
     - **rfc**: RFC tax ID (optional)
-    - **contact_name**: Contact person name (optional)
-    - **contact_email**: Contact email (optional)
-    - **contact_phone**: Contact phone (optional)
+    - **phone**: Phone number (optional)
     - **address**: Physical address (optional)
     - **postal_code**: Postal code (optional)
     - **city**: City (optional)
@@ -126,10 +125,8 @@ def create_supplier(
     - **percentage_iva**: IVA percentage (optional)
     - **delivery_time_days**: Delivery time in days (optional)
     - **is_active**: Active status (default: true)
-    - **created_by**: User ID who created the supplier (required)
-    - **updated_by**: User ID who last updated the supplier (required)
     """
-    return supplier.create(db, supplier_in=supplier_in)
+    return supplier.create(db, supplier_in=supplier_in, user_id=current_user.id)
 
 
 @router.put("/{supplier_id}", response_model=Supplier, summary="Update supplier")
@@ -145,7 +142,7 @@ def update_supplier(
     - **supplier_id**: The ID of the supplier to update
     - All fields are optional for update
     """
-    db_supplier = supplier.update(db, supplier_id=supplier_id, supplier_in=supplier_in)
+    db_supplier = supplier.update(db, supplier_id=supplier_id, supplier_in=supplier_in, user_id=current_user.id)
     
     if not db_supplier:
         raise HTTPException(
