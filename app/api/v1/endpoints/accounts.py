@@ -1,12 +1,14 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request, UploadFile, File
 from sqlalchemy.orm import Session
+from io import BytesIO
+import openpyxl
 
 from app.core.database import get_db
 from app.core.dependencies import require_permission
 from app.models.user import User
 from app.crud.account import account
-from app.schemas.account import Account, AccountCreate, AccountUpdate, AccountList
+from app.schemas.account import Account, AccountCreate, AccountUpdate, AccountList, AccountBulkUploadResult
 from app.utils.request import get_client_ip
 
 router = APIRouter()
@@ -150,3 +152,50 @@ def delete_account(
         )
     
     return None
+
+
+@router.post("/bulk-upload", response_model=AccountBulkUploadResult, status_code=status.HTTP_200_OK, summary="Bulk upload accounts from Excel")
+def bulk_upload_accounts(
+    request: Request,
+    file: UploadFile = File(..., description="Excel file (.xlsx). Col A = account_number, Col B = description"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("accounts", "create"))
+):
+    """
+    Bulk create accounts from an Excel file (.xlsx).
+
+    Row 1 is skipped (header). Data is read by position:
+    - **Column A**: account_number
+    - **Column B**: description (optional)
+
+    Returns a summary with the number of created accounts, failed rows, and error details.
+    """
+    if not file.filename.endswith(".xlsx"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only .xlsx files are supported"
+        )
+
+    content = file.file.read()
+
+    try:
+        wb = openpyxl.load_workbook(BytesIO(content), data_only=True)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The file could not be read. Make sure it is a valid .xlsx file"
+        )
+
+    ws = wb.active
+    all_rows = list(ws.iter_rows(min_row=2, values_only=True))  # skip header row
+
+    if not all_rows:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The file is empty or only contains a header row"
+        )
+
+    data_rows = [row for row in all_rows if any(cell is not None for cell in row)]
+    ip_address = get_client_ip(request)
+
+    return account.bulk_create(db, rows=data_rows, current_user_id=current_user.id, ip_address=ip_address)

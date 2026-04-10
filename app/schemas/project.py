@@ -97,5 +97,20 @@ class ProjectMemberSimple(BaseModel):
 class ProjectWithMembers(Project):
     """Schema for Project response with team members."""
     project_members: Optional[list[ProjectMemberSimple]] = None
+
+
+class ProjectBulkUploadError(BaseModel):
+    """Schema for a single row error in bulk upload."""
+    row: int
+    project_code: Optional[str] = None
+    error: str
+
+
+class ProjectBulkUploadResult(BaseModel):
+    """Schema for bulk upload result."""
+    total_rows: int
+    created: int
+    failed: int
+    errors: List[ProjectBulkUploadError]
     
     model_config = ConfigDict(from_attributes=True)

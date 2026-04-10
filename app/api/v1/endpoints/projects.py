@@ -1,7 +1,9 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request, UploadFile, File
 from sqlalchemy.orm import Session
 from decimal import Decimal
+from io import BytesIO
+import openpyxl
 
 from app.core.database import get_db
 from app.core.dependencies import require_permission
@@ -14,7 +16,9 @@ from app.schemas.project import (
     ProjectList, 
     ProjectWithUsers,
     ProjectWithMembers,
-    ProjectSummary
+    ProjectSummary,
+    ProjectBulkUploadResult,
+    ProjectBulkUploadError,
 )
 from app.utils.request import get_client_ip
 
@@ -285,3 +289,50 @@ def get_projects_by_status(
     total = project.count(db, status=status)
     
     return ProjectList(total=total, items=projects)
+
+
+@router.post("/bulk-upload", response_model=ProjectBulkUploadResult, status_code=status.HTTP_200_OK, summary="Bulk upload projects from Excel")
+def bulk_upload_projects(
+    request: Request,
+    file: UploadFile = File(..., description="Excel file (.xlsx) with columns: project_code, name"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("projects", "create"))
+):
+    """
+    Bulk create projects from an Excel file (.xlsx).
+
+    The file must contain the following columns (header row required):
+    - **project_code**: Unique project code
+    - **name**: Project name
+
+    Returns a summary with the number of created projects, failed rows, and error details.
+    """
+    if not file.filename.endswith(".xlsx"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only .xlsx files are supported"
+        )
+
+    content = file.file.read()
+
+    try:
+        wb = openpyxl.load_workbook(BytesIO(content), read_only=True, data_only=True)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The file could not be read. Make sure it is a valid .xlsx file"
+        )
+
+    ws = wb.active
+    all_rows = list(ws.iter_rows(min_row=2, values_only=True))  # skip header row
+
+    if not all_rows:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The file is empty or only contains a header row"
+        )
+
+    data_rows = [row for row in all_rows if any(cell is not None for cell in row)]
+    ip_address = get_client_ip(request)
+
+    return project.bulk_create(db, rows=data_rows, current_user_id=current_user.id, ip_address=ip_address)

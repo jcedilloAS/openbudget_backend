@@ -12,5 +12,7 @@ from app.models.catalog_action import CatalogAction
 from app.models.role_permission import RolePermission
 from app.models.system_configuration import SystemConfiguration
 from app.models.retention import Retention
+from app.models.requisition import Requisition
+from app.models.requisition_item import RequisitionItem
 
-__all__ = ["Account", "Role", "User", "AuditLog", "Project", "UserProject", "Supplier", "SupplierDocument", "Catalog", "Action", "CatalogAction", "RolePermission", "SystemConfiguration", "Retention"]
+__all__ = ["Account", "Role", "User", "AuditLog", "Project", "UserProject", "Supplier", "SupplierDocument", "Catalog", "Action", "CatalogAction", "RolePermission", "SystemConfiguration", "Retention", "Requisition", "RequisitionItem"]

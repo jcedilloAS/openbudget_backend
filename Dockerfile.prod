@@ -45,8 +45,17 @@ COPY --from=builder /root/.local /home/appuser/.local
 # Copy project files
 COPY --chown=appuser:appuser . .
 
+# Create uploads directory
+RUN mkdir -p uploads && chown -R appuser:appuser uploads
+
 # Switch to non-root user
 USER appuser
+
+# Expose port
+EXPOSE 8001
+
+# Default command
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "4"]
 
 # Expose port
 EXPOSE 8001

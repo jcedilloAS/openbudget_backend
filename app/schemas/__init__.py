@@ -60,7 +60,8 @@ from app.schemas.supplier_document import (
     SupplierDocumentCreate,
     SupplierDocumentUpdate,
     SupplierDocumentInDB,
-    SupplierDocumentList
+    SupplierDocumentList,
+    SupplierDocumentInline
 )
 from app.schemas.catalog import (
     Catalog,
@@ -108,6 +109,22 @@ from app.schemas.retention import (
     RetentionUpdate,
     RetentionInDB,
     RetentionList
+)
+from app.schemas.requisition import (
+    Requisition,
+    RequisitionCreate,
+    RequisitionUpdate,
+    RequisitionList,
+    RequisitionWithDetails,
+    RequisitionApprove,
+    RequisitionReject
+)
+from app.schemas.requisition_item import (
+    RequisitionItem,
+    RequisitionItemCreate,
+    RequisitionItemUpdate,
+    RequisitionItemList,
+    RequisitionItemInline
 )
 
 __all__ = [
@@ -193,5 +210,17 @@ __all__ = [
     "RetentionCreate",
     "RetentionUpdate",
     "RetentionInDB",
-    "RetentionList"
+    "RetentionList",
+    "Requisition",
+    "RequisitionCreate",
+    "RequisitionUpdate",
+    "RequisitionList",
+    "RequisitionWithDetails",
+    "RequisitionApprove",
+    "RequisitionReject",
+    "RequisitionItem",
+    "RequisitionItemCreate",
+    "RequisitionItemUpdate",
+    "RequisitionItemList",
+    "RequisitionItemInline"
 ]

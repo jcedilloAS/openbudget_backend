@@ -1,9 +1,11 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+import json
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Form
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import require_permission
+from app.core.config import settings
 from app.models.user import User
 from app.crud.supplier import supplier
 from app.schemas.supplier import (
@@ -14,6 +16,8 @@ from app.schemas.supplier import (
     SupplierWithUsers,
     SupplierWithDocuments
 )
+from app.schemas.supplier_document import SupplierDocumentInline
+from app.utils.file_storage import save_uploaded_file
 
 router = APIRouter()
 
@@ -104,44 +108,155 @@ def get_supplier_by_code(
     return db_supplier
 
 
-@router.post("/", response_model=Supplier, status_code=status.HTTP_201_CREATED, summary="Create new supplier")
-def create_supplier(
-    supplier_in: SupplierCreate,
+@router.post("/", response_model=SupplierWithDocuments, status_code=status.HTTP_201_CREATED, summary="Create new supplier")
+async def create_supplier(
+    supplier_data: str = Form(..., description="JSON string with supplier data"),
+    files: List[UploadFile] = File(default=[], description="Document files to upload"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("suppliers", "create"))
 ):
     """
-    Create a new supplier.
+    Create a new supplier with optional document uploads.
     
-    - **supplier_code**: Unique supplier code (required)
-    - **name**: Supplier name (required)
-    - **rfc**: RFC tax ID (optional)
-    - **phone**: Phone number (optional)
-    - **address**: Physical address (optional)
-    - **postal_code**: Postal code (optional)
-    - **city**: City (optional)
-    - **state**: State (optional)
-    - **country**: Country (optional)
-    - **percentage_iva**: IVA percentage (optional)
-    - **delivery_time_days**: Delivery time in days (optional)
-    - **is_active**: Active status (default: true)
+    **Multipart form fields:**
+    - **supplier_data**: JSON string containing supplier information:
+      - supplier_code: Unique supplier code (required)
+      - name: Supplier name (required)
+      - rfc: RFC tax ID (optional)
+      - phone: Phone number (optional)
+      - address: Physical address (optional)
+      - postal_code: Postal code (optional)
+      - city: City (optional)
+      - state: State (optional)
+      - country: Country (optional)
+      - percentage_iva: IVA percentage (optional)
+      - delivery_time_days: Delivery time in days (optional)
+      - is_active: Active status (default: true)
+    - **files**: Multiple files (PDF, images, DOCX, XLSX) up to 10MB each
     """
+    # Parse supplier data from JSON string
+    try:
+        supplier_in = SupplierCreate.model_validate_json(supplier_data)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid supplier data: {str(e)}"
+        )
+    
+    # Save uploaded files and build documents list
+    documents = []
+    for file in files:
+        try:
+            file_url = await save_uploaded_file(
+                file=file,
+                subfolder="supplier_documents",
+                upload_dir=settings.UPLOAD_DIR,
+                max_size_mb=settings.MAX_UPLOAD_SIZE_MB
+            )
+            documents.append(SupplierDocumentInline(
+                description=file.filename,
+                document_url=file_url
+            ))
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to process file {file.filename}: {str(e)}"
+            )
+    
+    # Add documents to supplier data
+    if documents:
+        supplier_in.documents = documents
+    
     return supplier.create(db, supplier_in=supplier_in, user_id=current_user.id)
 
 
-@router.put("/{supplier_id}", response_model=Supplier, summary="Update supplier")
-def update_supplier(
+@router.put("/{supplier_id}", response_model=SupplierWithDocuments, summary="Update supplier")
+async def update_supplier(
     supplier_id: int,
-    supplier_in: SupplierUpdate,
+    supplier_data: str = Form(..., description="JSON string with supplier data"),
+    files: List[UploadFile] = File(default=[], description="New document files to upload"),
+    existing_documents: Optional[str] = Form(None, description="JSON array of existing documents to keep"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("suppliers", "update"))
 ):
     """
-    Update an existing supplier.
+    Update an existing supplier with optional document uploads.
     
-    - **supplier_id**: The ID of the supplier to update
-    - All fields are optional for update
+    **Multipart form fields:**
+    - **supplier_data**: JSON string with fields to update (all optional)
+    - **files**: New files to upload (optional)
+    - **existing_documents**: JSON array of existing documents to keep, e.g.:
+      `[{"id": 1, "description": "Contract", "document_url": "/uploads/..."}]`
+      Documents not in this array will be deleted.
+      Omit this field to keep all existing documents unchanged.
     """
+    # Parse supplier data from JSON string
+    try:
+        supplier_in = SupplierUpdate.model_validate_json(supplier_data)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid supplier data: {str(e)}"
+        )
+    
+    # Check if supplier exists first (needed if we have new files but no existing_documents)
+    db_supplier_check = supplier.get(db, supplier_id=supplier_id)
+    if not db_supplier_check:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Supplier with id {supplier_id} not found"
+        )
+    
+    # Parse existing documents if provided
+    documents = []
+    if existing_documents:
+        try:
+            existing_docs_data = json.loads(existing_documents)
+            documents = [SupplierDocumentInline(**doc) for doc in existing_docs_data]
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid existing_documents data: {str(e)}"
+            )
+    elif files:
+        # If no existing_documents provided but files are being uploaded,
+        # we need to preserve existing documents and add new ones
+        for existing_doc in db_supplier_check.documents:
+            documents.append(SupplierDocumentInline(
+                id=existing_doc.id,
+                description=existing_doc.description,
+                document_url=existing_doc.document_url
+            ))
+    
+    # Save new uploaded files
+    for file in files:
+        try:
+            file_url = await save_uploaded_file(
+                file=file,
+                subfolder="supplier_documents",
+                upload_dir=settings.UPLOAD_DIR,
+                max_size_mb=settings.MAX_UPLOAD_SIZE_MB
+            )
+            documents.append(SupplierDocumentInline(
+                description=file.filename,
+                document_url=file_url
+            ))
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to process file {file.filename}: {str(e)}"
+            )
+    
+    # Set documents if any were provided (existing or new)
+    # If existing_documents was provided (even as empty array), it means we want to sync documents
+    # If existing_documents was not provided (None) and no files, we don't touch documents
+    if existing_documents is not None or files:
+        supplier_in.documents = documents
+    
     db_supplier = supplier.update(db, supplier_id=supplier_id, supplier_in=supplier_in, user_id=current_user.id)
     
     if not db_supplier:

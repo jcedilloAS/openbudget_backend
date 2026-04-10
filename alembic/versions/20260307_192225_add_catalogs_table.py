@@ -44,45 +44,51 @@ def upgrade() -> None:
     
     op.bulk_insert(catalogs_table, [
         {
-            'catalog_code': 'USUARIOS',
+            'catalog_code': 'users',
             'catalog_name': 'Usuarios',
             'description': 'Catálogo de usuarios del sistema',
             'is_active': True
         },
         {
-            'catalog_code': 'PROYECTOS',
+            'catalog_code': 'projects',
             'catalog_name': 'Proyectos',
             'description': 'Catálogo de proyectos',
             'is_active': True
         },
         {
-            'catalog_code': 'BITACORA',
+            'catalog_code': 'audit',
             'catalog_name': 'Bitácora',
             'description': 'Catálogo de bitácora de eventos',
             'is_active': True
         },
         {
-            'catalog_code': 'CUENTAS',
+            'catalog_code': 'accounts',
             'catalog_name': 'Cuentas',
             'description': 'Catálogo de cuentas contables',
             'is_active': True
         },
         {
-            'catalog_code': 'RETENCIONES',
+            'catalog_code': 'retentions',
             'catalog_name': 'Retenciones',
             'description': 'Catálogo de retenciones fiscales',
             'is_active': True
         },
         {
-            'catalog_code': 'PROVEEDORES',
+            'catalog_code': 'suppliers',
             'catalog_name': 'Proveedores',
             'description': 'Catálogo de proveedores',
             'is_active': True
         },
         {
-            'catalog_code': 'REQUISICIONES',
+            'catalog_code': 'requisitions',
             'catalog_name': 'Requisiciones',
             'description': 'Catálogo de requisiciones',
+            'is_active': True
+        },
+        {
+            'catalog_code': 'roles',
+            'catalog_name': 'Roles',
+            'description': 'Catálogo de roles',
             'is_active': True
         }
     ])

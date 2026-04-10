@@ -8,7 +8,7 @@ from decimal import Decimal
 from app.models.project import Project
 from app.models.user import User
 from app.models.user_project import UserProject
-from app.schemas.project import ProjectCreate, ProjectUpdate, ProjectSummary
+from app.schemas.project import ProjectCreate, ProjectUpdate, ProjectSummary, ProjectBulkUploadResult, ProjectBulkUploadError
 from app.utils.audit import AuditLogger
 
 
@@ -46,7 +46,7 @@ class CRUDProject:
         if created_by is not None:
             query = query.filter(Project.created_by == created_by)
         
-        return query.offset(skip).limit(limit).all()
+        return query.order_by(Project.id).offset(skip).limit(limit).all()
     
     def count(
         self, 
@@ -101,7 +101,7 @@ class CRUDProject:
             initial_budget=project_in.initial_budget,
             commited=project_in.commited,
             spent=project_in.spent,
-            available_balance=project_in.available_balance,
+            available_balance=project_in.initial_budget,  # Set available_balance equal to initial_budget
             status=project_in.status,
             created_by=current_user_id,
             updated_by=current_user_id
@@ -431,6 +431,67 @@ class CRUDProject:
             .offset(skip)\
             .limit(limit)\
             .all()
+
+    def bulk_create(
+        self,
+        db: Session,
+        rows: List[tuple],
+        current_user_id: int,
+        ip_address: Optional[str] = None
+    ) -> ProjectBulkUploadResult:
+        """Bulk create projects from a list of rows. Col 0 = project_code, Col 1 = name."""
+        created, failed = 0, 0
+        errors: List[ProjectBulkUploadError] = []
+
+        for row_idx, row in enumerate(rows, start=2):  # start=2: row 1 is header
+            project_code = str(row[0] or "").strip() if len(row) > 0 else ""
+            name = str(row[1] or "").strip() if len(row) > 1 else ""
+            print(f'project_code: {project_code} name: {name} ')
+            if not project_code or not name:
+                failed += 1
+                errors.append(ProjectBulkUploadError(
+                    row=row_idx,
+                    project_code=project_code or None,
+                    error="project_code and name are required"
+                ))
+                continue
+
+            try:
+                project_in = ProjectCreate(project_code=project_code, name=name)
+                self.create(db, project_in=project_in, current_user_id=current_user_id, ip_address=ip_address)
+                created += 1
+            except HTTPException as e:
+                failed += 1
+                errors.append(ProjectBulkUploadError(
+                    row=row_idx,
+                    project_code=project_code,
+                    error=e.detail
+                ))
+            except Exception as e:
+                failed += 1
+                errors.append(ProjectBulkUploadError(
+                    row=row_idx,
+                    project_code=project_code,
+                    error=str(e)
+                ))
+
+        AuditLogger.log_action(
+            db=db,
+            user_id=current_user_id,
+            action="BULK_CREATE",
+            module="projects",
+            description=f"Bulk upload: {created} created, {failed} failed",
+            ip_address=ip_address,
+            new_data={"created": created, "failed": failed},
+            status="SUCCESS" if failed == 0 else "PARTIAL"
+        )
+
+        return ProjectBulkUploadResult(
+            total_rows=created + failed,
+            created=created,
+            failed=failed,
+            errors=errors
+        )
 
 
 # Create a singleton instance

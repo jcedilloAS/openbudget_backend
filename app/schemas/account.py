@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 
 class AccountBase(BaseModel):
@@ -42,3 +42,18 @@ class AccountList(BaseModel):
     items: list[Account]
     
     model_config = ConfigDict(from_attributes=True)
+
+
+class AccountBulkUploadError(BaseModel):
+    """Schema for a single row error in bulk upload."""
+    row: int
+    account_number: Optional[str] = None
+    error: str
+
+
+class AccountBulkUploadResult(BaseModel):
+    """Schema for bulk upload result."""
+    total_rows: int
+    created: int
+    failed: int
+    errors: List[AccountBulkUploadError]

@@ -3,6 +3,13 @@ from datetime import datetime
 from typing import Optional
 
 
+class SupplierDocumentInline(BaseModel):
+    """Schema for inline document data when creating/updating a supplier."""
+    id: Optional[int] = Field(None, gt=0, description="Document ID (for updates, omit for new documents)")
+    description: Optional[str] = Field(None, max_length=500, description="Document description")
+    document_url: Optional[str] = Field(None, min_length=1, max_length=1000, description="Document URL (required for new docs, optional when updating existing)")
+
+
 class SupplierDocumentBase(BaseModel):
     """Base schema for SupplierDocument."""
     supplier_id: int = Field(..., gt=0, description="Supplier ID")

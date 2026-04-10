@@ -4,6 +4,7 @@ from typing import List, Optional
 from fastapi import HTTPException, status
 
 from app.models.supplier import Supplier
+from app.models.supplier_document import SupplierDocument
 from app.schemas.supplier import SupplierCreate, SupplierUpdate
 
 
@@ -64,25 +65,28 @@ class CRUDSupplier:
                 detail=f"Supplier with code '{supplier_in.supplier_code}' already exists"
             )
         
+        supplier_data = supplier_in.model_dump(exclude={"documents"})
         db_supplier = Supplier(
-            supplier_code=supplier_in.supplier_code,
-            name=supplier_in.name,
-            rfc=supplier_in.rfc,
-            phone=supplier_in.phone,
-            address=supplier_in.address,
-            postal_code=supplier_in.postal_code,
-            city=supplier_in.city,
-            state=supplier_in.state,
-            country=supplier_in.country,
-            percentage_iva=supplier_in.percentage_iva,
-            delivery_time_days=supplier_in.delivery_time_days,
-            is_active=supplier_in.is_active,
+            **supplier_data,
             created_by=user_id,
             updated_by=user_id
         )
         
         try:
             db.add(db_supplier)
+            db.flush()
+            
+            if supplier_in.documents:
+                for doc in supplier_in.documents:
+                    db_doc = SupplierDocument(
+                        supplier_id=db_supplier.id,
+                        description=doc.description,
+                        document_url=doc.document_url,
+                        created_by=user_id,
+                        updated_by=user_id
+                    )
+                    db.add(db_doc)
+            
             db.commit()
             db.refresh(db_supplier)
             return db_supplier
@@ -117,12 +121,50 @@ class CRUDSupplier:
         
         # Update only provided fields
         update_data = supplier_in.model_dump(exclude_unset=True)
+        documents_data = update_data.pop("documents", None)
         update_data["updated_by"] = user_id
         
         for field, value in update_data.items():
             setattr(db_supplier, field, value)
         
         try:
+            # Sync documents if provided (upsert by ID)
+            if documents_data is not None:
+                incoming_ids = {doc["id"] for doc in documents_data if doc.get("id")}
+                
+                # Delete documents not in the incoming list
+                for existing_doc in list(db_supplier.documents):
+                    if existing_doc.id not in incoming_ids:
+                        db.delete(existing_doc)
+                
+                existing_docs_map = {doc.id: doc for doc in db_supplier.documents if doc.id in incoming_ids}
+                
+                for doc_data in documents_data:
+                    doc_id = doc_data.get("id")
+                    if doc_id and doc_id in existing_docs_map:
+                        # Update existing document
+                        existing_doc = existing_docs_map[doc_id]
+                        if "description" in doc_data:
+                            existing_doc.description = doc_data.get("description")
+                        if "document_url" in doc_data and doc_data.get("document_url"):
+                            existing_doc.document_url = doc_data["document_url"]
+                        existing_doc.updated_by = user_id
+                    else:
+                        # Create new document (requires document_url)
+                        if not doc_data.get("document_url"):
+                            raise HTTPException(
+                                status_code=status.HTTP_400_BAD_REQUEST,
+                                detail="document_url is required for new documents"
+                            )
+                        db_doc = SupplierDocument(
+                            supplier_id=db_supplier.id,
+                            description=doc_data.get("description"),
+                            document_url=doc_data["document_url"],
+                            created_by=user_id,
+                            updated_by=user_id
+                        )
+                        db.add(db_doc)
+            
             db.commit()
             db.refresh(db_supplier)
             return db_supplier

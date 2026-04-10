@@ -1,10 +1,10 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from fastapi import HTTPException, status
 
 from app.models.account import Account
-from app.schemas.account import AccountCreate, AccountUpdate
+from app.schemas.account import AccountCreate, AccountUpdate, AccountBulkUploadResult, AccountBulkUploadError
 from app.utils.audit import AuditLogger
 
 
@@ -256,6 +256,71 @@ class CRUDAccount:
         )
         
         return db_account
+
+    def bulk_create(
+        self,
+        db: Session,
+        rows: List[tuple],
+        current_user_id: int,
+        ip_address: Optional[str] = None
+    ) -> AccountBulkUploadResult:
+        """Bulk create accounts from a list of rows. Col 0 = account_number, Col 1 = description."""
+        from app.schemas.account import AccountBulkUploadError
+        created, failed = 0, 0
+        errors: List[AccountBulkUploadError] = []
+
+        for row_idx, row in enumerate(rows, start=2):  # start=2: row 1 is header
+            account_number = str(row[0] or "").strip() if len(row) > 0 else ""
+            description = str(row[1] or "").strip() if len(row) > 1 else None
+
+            if not account_number:
+                failed += 1
+                errors.append(AccountBulkUploadError(
+                    row=row_idx,
+                    account_number=None,
+                    error="account_number is required"
+                ))
+                continue
+
+            try:
+                account_in = AccountCreate(
+                    account_number=account_number,
+                    description=description or None
+                )
+                self.create(db, account_in=account_in, current_user_id=current_user_id, ip_address=ip_address)
+                created += 1
+            except HTTPException as e:
+                failed += 1
+                errors.append(AccountBulkUploadError(
+                    row=row_idx,
+                    account_number=account_number,
+                    error=e.detail
+                ))
+            except Exception as e:
+                failed += 1
+                errors.append(AccountBulkUploadError(
+                    row=row_idx,
+                    account_number=account_number,
+                    error=str(e)
+                ))
+
+        AuditLogger.log_action(
+            db=db,
+            user_id=current_user_id,
+            action="BULK_CREATE",
+            module="accounts",
+            description=f"Bulk upload: {created} created, {failed} failed",
+            ip_address=ip_address,
+            new_data={"created": created, "failed": failed},
+            status="SUCCESS" if failed == 0 else "PARTIAL"
+        )
+
+        return AccountBulkUploadResult(
+            total_rows=created + failed,
+            created=created,
+            failed=failed,
+            errors=errors
+        )
 
 
 # Create a singleton instance

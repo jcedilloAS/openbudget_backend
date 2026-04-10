@@ -3,6 +3,8 @@ from datetime import datetime
 from typing import Optional, List, TYPE_CHECKING
 from decimal import Decimal
 
+from app.schemas.supplier_document import SupplierDocumentInline
+
 if TYPE_CHECKING:
     from app.schemas.supplier_document import SupplierDocument
 
@@ -37,6 +39,7 @@ class SupplierCreate(BaseModel):
     percentage_iva: Optional[Decimal] = Field(None, ge=0, le=100, description="IVA percentage")
     delivery_time_days: Optional[int] = Field(None, ge=0, description="Delivery time in days")
     is_active: bool = Field(default=True, description="Active status")
+    documents: Optional[List[SupplierDocumentInline]] = Field(None, description="List of supplier documents")
 
 
 class SupplierUpdate(BaseModel):
@@ -53,6 +56,7 @@ class SupplierUpdate(BaseModel):
     percentage_iva: Optional[Decimal] = Field(None, ge=0, le=100, description="IVA percentage")
     delivery_time_days: Optional[int] = Field(None, ge=0, description="Delivery time in days")
     is_active: Optional[bool] = Field(None, description="Active status")
+    documents: Optional[List[SupplierDocumentInline]] = Field(None, description="List of supplier documents")
 
 
 class SupplierInDB(SupplierBase):

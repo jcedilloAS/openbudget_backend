@@ -10,7 +10,7 @@ class SupplierDocument(Base):
     __tablename__ = "supplier_documents"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=False, index=True)
+    supplier_id = Column(Integer, ForeignKey("suppliers.id", ondelete="CASCADE"), nullable=False, index=True)
     description = Column(String(500), nullable=True)
     document_url = Column(String(1000), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

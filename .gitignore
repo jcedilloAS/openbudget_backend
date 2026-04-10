@@ -45,3 +45,6 @@ wheels/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Uploads
+uploads/

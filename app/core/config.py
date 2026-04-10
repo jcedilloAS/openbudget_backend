@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     COOKIE_HTTPONLY: bool = True
     COOKIE_SAMESITE: str = "lax"  # 'lax', 'strict', or 'none'
     
+    # File Upload
+    UPLOAD_DIR: str = "/app/uploads"
+    MAX_UPLOAD_SIZE_MB: int = 10
+    
     class Config:
         env_file = ".env"
         case_sensitive = True
