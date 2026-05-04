@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import accounts, roles, users, audit_logs, projects, user_projects, auth, suppliers, supplier_documents, catalogs, actions, catalog_actions, role_permissions, system_configuration, retentions, requisitions, requisition_items
+from app.api.v1.endpoints import accounts, roles, users, audit_logs, projects, user_projects, auth, suppliers, supplier_documents, supplier_retentions, catalogs, actions, catalog_actions, categories, role_permissions, system_configuration, retentions, requisitions, requisition_items, requisition_documents, requisition_retentions, notifications, dashboard
 
 api_router = APIRouter()
 
@@ -52,6 +52,11 @@ api_router.include_router(
     tags=["supplier-documents"]
 )
 api_router.include_router(
+    supplier_retentions.router,
+    prefix="/supplier-retentions",
+    tags=["supplier-retentions"]
+)
+api_router.include_router(
     catalogs.router,
     prefix="/catalogs",
     tags=["catalogs"]
@@ -65,6 +70,11 @@ api_router.include_router(
     catalog_actions.router,
     prefix="/catalog-actions",
     tags=["catalog-actions"]
+)
+api_router.include_router(
+    categories.router,
+    prefix="/categories",
+    tags=["categories"]
 )
 api_router.include_router(
     role_permissions.router,
@@ -90,4 +100,24 @@ api_router.include_router(
     requisition_items.router,
     prefix="/requisition-items",
     tags=["requisition-items"]
+)
+api_router.include_router(
+    requisition_documents.router,
+    prefix="/requisition-documents",
+    tags=["requisition-documents"]
+)
+api_router.include_router(
+    requisition_retentions.router,
+    prefix="/requisition-retentions",
+    tags=["requisition-retentions"]
+)
+api_router.include_router(
+    notifications.router,
+    prefix="/notifications",
+    tags=["notifications"]
+)
+api_router.include_router(
+    dashboard.router,
+    prefix="/dashboard",
+    tags=["dashboard"]
 )

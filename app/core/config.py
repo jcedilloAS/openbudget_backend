@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     API_V1_PREFIX: str = "/api/v1"
     
     # CORS
-    ALLOWED_ORIGINS: List[str] = ["http://localhost:5173", "http://localhost:8000"]
+    ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8000"]
     
     # Security & JWT
     SECRET_KEY: str = "your-secret-key-here-change-in-production"
@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     COOKIE_HTTPONLY: bool = True
     COOKIE_SAMESITE: str = "lax"  # 'lax', 'strict', or 'none'
     
+    # Frontend
+    FRONTEND_URL: str = "http://localhost:3000"  # Configurar en .env, ej: http://localhost:5173
+
     # File Upload
     UPLOAD_DIR: str = "/app/uploads"
     MAX_UPLOAD_SIZE_MB: int = 10

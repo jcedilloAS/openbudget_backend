@@ -104,7 +104,8 @@ class CRUDUser:
             email=user_in.email,
             password_hash=hashed_password,
             role_id=user_in.role_id,
-            is_active=user_in.is_active
+            is_active=user_in.is_active,
+            must_change_password=True,
         )
         
         try:
@@ -333,6 +334,19 @@ class CRUDUser:
         
         return db_user
     
+    def set_password(self, db: Session, db_user: User, current_password: str, new_password: str) -> User:
+        """Verify current password then update to new one and clear must_change_password."""
+        if not self.verify_password(current_password, db_user.password_hash):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Contraseña actual incorrecta",
+            )
+        db_user.password_hash = self.get_password_hash(new_password)
+        db_user.must_change_password = False
+        db.commit()
+        db.refresh(db_user)
+        return db_user
+
     def authenticate(self, db: Session, username: str, password: str) -> Optional[User]:
         """Authenticate a user by username and password."""
         user = self.get_by_username(db, username)

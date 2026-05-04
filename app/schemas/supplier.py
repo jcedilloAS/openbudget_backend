@@ -4,6 +4,7 @@ from typing import Optional, List, TYPE_CHECKING
 from decimal import Decimal
 
 from app.schemas.supplier_document import SupplierDocumentInline
+from app.schemas.supplier_retention import SupplierRetentionInline
 
 if TYPE_CHECKING:
     from app.schemas.supplier_document import SupplierDocument
@@ -22,6 +23,7 @@ class SupplierBase(BaseModel):
     country: Optional[str] = Field(None, max_length=100, description="Country")
     percentage_iva: Optional[Decimal] = Field(None, ge=0, le=100, description="IVA percentage")
     delivery_time_days: Optional[int] = Field(None, ge=0, description="Delivery time in days")
+    category_id: Optional[int] = Field(None, description="Category ID")
     is_active: bool = Field(default=True, description="Active status")
 
 
@@ -38,8 +40,10 @@ class SupplierCreate(BaseModel):
     country: Optional[str] = Field(None, max_length=100, description="Country")
     percentage_iva: Optional[Decimal] = Field(None, ge=0, le=100, description="IVA percentage")
     delivery_time_days: Optional[int] = Field(None, ge=0, description="Delivery time in days")
+    category_id: Optional[int] = Field(None, description="Category ID")
     is_active: bool = Field(default=True, description="Active status")
     documents: Optional[List[SupplierDocumentInline]] = Field(None, description="List of supplier documents")
+    retentions: Optional[List[SupplierRetentionInline]] = Field(None, description="List of retentions to assign")
 
 
 class SupplierUpdate(BaseModel):
@@ -55,8 +59,10 @@ class SupplierUpdate(BaseModel):
     country: Optional[str] = Field(None, max_length=100, description="Country")
     percentage_iva: Optional[Decimal] = Field(None, ge=0, le=100, description="IVA percentage")
     delivery_time_days: Optional[int] = Field(None, ge=0, description="Delivery time in days")
+    category_id: Optional[int] = Field(None, description="Category ID")
     is_active: Optional[bool] = Field(None, description="Active status")
     documents: Optional[List[SupplierDocumentInline]] = Field(None, description="List of supplier documents")
+    retentions: Optional[List[SupplierRetentionInline]] = Field(None, description="List of retentions to assign (replaces existing)")
 
 
 class SupplierInDB(SupplierBase):
@@ -72,12 +78,15 @@ class SupplierInDB(SupplierBase):
 
 class Supplier(SupplierInDB):
     """Schema for Supplier response."""
-    pass
+    category_name: Optional[str] = Field(None, description="Category name")
+    
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SupplierWithDocuments(Supplier):
-    """Schema for Supplier response including child documents."""
+    """Schema for Supplier response including child documents and retentions."""
     documents: List["SupplierDocument"] = []
+    supplier_retentions: List["SupplierRetentionSchema"] = []
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -100,4 +109,5 @@ class SupplierList(BaseModel):
 
 # Resolve forward reference after SupplierDocument is importable
 from app.schemas.supplier_document import SupplierDocument  # noqa: E402
+from app.schemas.supplier_retention import SupplierRetention as SupplierRetentionSchema  # noqa: E402
 SupplierWithDocuments.model_rebuild()

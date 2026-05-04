@@ -43,7 +43,10 @@ class CRUDSystemConfiguration:
                     'smtp_port': config_in.smtp_port,
                     'smtp_username': config_in.smtp_username,
                     'smtp_password': config_in.smtp_password,
-                    'smtp_encryption': config_in.smtp_encryption
+                    'smtp_encryption': config_in.smtp_encryption,
+                    'logo_url': config_in.logo_url,
+                    'requisition_serie': config_in.requisition_serie,
+                    'requisition_folio_next': config_in.requisition_folio_next
                 }
                 
                 for field, value in fields_to_update.items():
@@ -65,10 +68,9 @@ class CRUDSystemConfiguration:
                         db=db,
                         user_id=current_user_id,
                         action="UPDATE",
-                        table_name="system_configuration",
-                        record_id=existing_config.id,
+                        module="system_configuration",
                         ip_address=ip_address or "unknown",
-                        details=f"Updated system configuration: {', '.join(changes)}"
+                        description=f"Updated system configuration: {', '.join(changes)}"
                     )
                 
                 return existing_config
@@ -96,6 +98,9 @@ class CRUDSystemConfiguration:
                 smtp_username=config_in.smtp_username,
                 smtp_password=config_in.smtp_password,
                 smtp_encryption=config_in.smtp_encryption,
+                logo_url=config_in.logo_url,
+                requisition_serie=config_in.requisition_serie,
+                requisition_folio_next=config_in.requisition_folio_next if config_in.requisition_folio_next is not None else 1,
                 created_by=current_user_id,
                 updated_by=current_user_id
             )
@@ -109,10 +114,9 @@ class CRUDSystemConfiguration:
                 db=db,
                 user_id=current_user_id,
                 action="CREATE",
-                table_name="system_configuration",
-                record_id=db_config.id,
+                module="system_configuration",
                 ip_address=ip_address or "unknown",
-                details=f"Created system configuration"
+                description=f"Created system configuration"
             )
             
             return db_config
@@ -172,10 +176,9 @@ class CRUDSystemConfiguration:
                     db=db,
                     user_id=current_user_id,
                     action="UPDATE",
-                    table_name="system_configuration",
-                    record_id=db_config.id,
+                    module="system_configuration",
                     ip_address=ip_address or "unknown",
-                    details=f"Updated system configuration: {', '.join(changes)}"
+                    description=f"Updated system configuration: {', '.join(changes)}"
                 )
             
             return db_config
@@ -192,6 +195,29 @@ class CRUDSystemConfiguration:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Error updating system configuration: {str(e)}"
             )
+
+
+    def get_next_folio(self, db: Session) -> str:
+        """Atomically get and increment the requisition folio number.
+        
+        Uses SELECT FOR UPDATE to prevent duplicate folios under concurrent requests.
+        Falls back to a timestamp-based number if no configuration is found.
+        """
+        from datetime import datetime as dt
+        
+        config = db.query(SystemConfiguration).with_for_update().first()
+        
+        if not config:
+            # Fallback: use timestamp so creation never fails
+            return f"REQ-{int(dt.now().timestamp())}"
+        
+        folio = config.requisition_folio_next or 1
+        serie = (config.requisition_serie or "REQ").strip()
+        
+        config.requisition_folio_next = folio + 1
+        db.flush()  # Persist increment inside current transaction without committing
+        
+        return f"{serie}-{folio:05d}"
 
 
 # Create instance

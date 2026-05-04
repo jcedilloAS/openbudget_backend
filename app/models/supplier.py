@@ -21,6 +21,7 @@ class Supplier(Base):
     country = Column(String(100), nullable=True)
     percentage_iva = Column(Numeric(5, 2), nullable=True)
     delivery_time_days = Column(Integer, nullable=True)
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
@@ -28,9 +29,11 @@ class Supplier(Base):
     updated_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     
     # Relationships
+    category = relationship("Category", back_populates="suppliers")
     creator = relationship("User", foreign_keys=[created_by], backref="created_suppliers")
     updater = relationship("User", foreign_keys=[updated_by], backref="updated_suppliers")
     documents = relationship("SupplierDocument", back_populates="supplier", cascade="all, delete-orphan")
+    supplier_retentions = relationship("SupplierRetention", back_populates="supplier", cascade="all, delete-orphan")
     
     def __repr__(self):
         return f"<Supplier(id={self.id}, supplier_code='{self.supplier_code}', name='{self.name}')>"

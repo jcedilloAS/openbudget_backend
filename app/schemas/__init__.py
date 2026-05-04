@@ -86,6 +86,13 @@ from app.schemas.catalog_action import (
     CatalogActionWithDetails,
     CatalogActionListWithDetails
 )
+from app.schemas.category import (
+    Category,
+    CategoryCreate,
+    CategoryUpdate,
+    CategoryInDB,
+    CategoryList
+)
 from app.schemas.role_permission import (
     RolePermission,
     RolePermissionCreate,
@@ -116,6 +123,7 @@ from app.schemas.requisition import (
     RequisitionUpdate,
     RequisitionList,
     RequisitionWithDetails,
+    RequisitionWithDocuments,
     RequisitionApprove,
     RequisitionReject
 )
@@ -125,6 +133,14 @@ from app.schemas.requisition_item import (
     RequisitionItemUpdate,
     RequisitionItemList,
     RequisitionItemInline
+)
+from app.schemas.requisition_document import (
+    RequisitionDocument,
+    RequisitionDocumentCreate,
+    RequisitionDocumentUpdate,
+    RequisitionDocumentInDB,
+    RequisitionDocumentList,
+    RequisitionDocumentInline
 )
 
 __all__ = [
@@ -222,5 +238,12 @@ __all__ = [
     "RequisitionItemCreate",
     "RequisitionItemUpdate",
     "RequisitionItemList",
-    "RequisitionItemInline"
+    "RequisitionItemInline",
+    "RequisitionWithDocuments",
+    "RequisitionDocument",
+    "RequisitionDocumentCreate",
+    "RequisitionDocumentUpdate",
+    "RequisitionDocumentInDB",
+    "RequisitionDocumentList",
+    "RequisitionDocumentInline"
 ]

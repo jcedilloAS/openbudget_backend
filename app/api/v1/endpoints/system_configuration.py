@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, UploadFile, File
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.config import settings
 from app.core.dependencies import require_permission
 from app.models.user import User
 from app.crud.system_configuration import system_configuration
@@ -12,6 +13,7 @@ from app.schemas.system_configuration import (
     SystemConfigurationWithPassword
 )
 from app.utils.request import get_client_ip
+from app.utils.file_storage import save_uploaded_file
 
 router = APIRouter()
 
@@ -172,3 +174,56 @@ def update_system_configuration(
         )
     
     return db_config
+
+
+@router.post("/upload-logo", response_model=SystemConfiguration, summary="Upload company logo")
+async def upload_logo(
+    request: Request,
+    file: UploadFile = File(..., description="Logo image (JPG, PNG, WEBP or SVG, max 5 MB)"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("system_configuration", "update"))
+):
+    """
+    Upload a company logo and store its URL in the active system configuration.
+
+    - **file**: Image file (JPG, PNG, WEBP or SVG), max 5 MB
+
+    The stored URL can be used in PDF generation and reports.
+    """
+    ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/svg+xml"}
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File type '{file.content_type}' not allowed. Use JPG, PNG, WEBP or SVG."
+        )
+    
+    config = system_configuration.get_active(db)
+    if not config:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active system configuration found. Create one first."
+        )
+    
+    logo_url = await save_uploaded_file(
+        file=file,
+        subfolder="logos",
+        upload_dir=settings.UPLOAD_DIR,
+        max_size_mb=5
+    )
+    
+    config.logo_url = logo_url
+    config.updated_by = current_user.id
+    db.commit()
+    db.refresh(config)
+    
+    from app.utils.audit import AuditLogger
+    AuditLogger.log_action(
+        db=db,
+        user_id=current_user.id,
+        action="UPDATE",
+        module="system_configuration",
+        ip_address=get_client_ip(request) or "unknown",
+        description=f"Uploaded company logo: {logo_url}"
+    )
+    
+    return config

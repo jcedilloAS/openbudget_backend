@@ -1,5 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 
@@ -25,6 +27,33 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+def _sanitize_validation_errors(obj):
+    """Replace binary bytes in validation error details to avoid UnicodeDecodeError."""
+    if isinstance(obj, bytes):
+        return f"<binary {len(obj)} bytes>"
+    if isinstance(obj, dict):
+        return {k: _sanitize_validation_errors(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_validation_errors(i) for i in obj]
+    return obj
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    import logging
+    logging.warning(
+        "422 Validation error on %s %s | content-type: %s | errors: %s",
+        request.method,
+        request.url.path,
+        request.headers.get("content-type", ""),
+        _sanitize_validation_errors(exc.errors()),
+    )
+    return JSONResponse(
+        status_code=422,
+        content={"detail": _sanitize_validation_errors(exc.errors())},
+    )
+
 
 # Include API router
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)

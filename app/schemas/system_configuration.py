@@ -11,6 +11,9 @@ class SystemConfigurationBase(BaseModel):
     smtp_port: Optional[str] = Field(None, max_length=10, description="SMTP server port")
     smtp_username: Optional[str] = Field(None, max_length=255, description="SMTP username")
     smtp_encryption: Optional[str] = Field(None, max_length=20, description="SMTP encryption type (TLS, SSL, None)")
+    logo_url: Optional[str] = Field(None, max_length=500, description="Company logo URL")
+    requisition_serie: Optional[str] = Field(None, max_length=20, description="Requisition series prefix (e.g. REQ)")
+    requisition_folio_next: Optional[int] = Field(None, ge=1, description="Next folio number to assign")
 
 
 class SystemConfigurationCreate(SystemConfigurationBase):
@@ -27,6 +30,9 @@ class SystemConfigurationUpdate(BaseModel):
     smtp_username: Optional[str] = Field(None, max_length=255, description="SMTP username")
     smtp_password: Optional[str] = Field(None, max_length=255, description="SMTP password (omit if not changing)")
     smtp_encryption: Optional[str] = Field(None, max_length=20, description="SMTP encryption type (TLS, SSL, None)")
+    logo_url: Optional[str] = Field(None, max_length=500, description="Company logo URL")
+    requisition_serie: Optional[str] = Field(None, max_length=20, description="Requisition series prefix (e.g. REQ)")
+    requisition_folio_next: Optional[int] = Field(None, ge=1, description="Next folio number to assign")
 
 
 class SystemConfigurationInDB(SystemConfigurationBase):

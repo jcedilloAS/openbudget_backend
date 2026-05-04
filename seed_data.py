@@ -19,6 +19,7 @@ from app.core.security import get_password_hash
 from app.models.action import Action
 from app.models.catalog import Catalog
 from app.models.catalog_action import CatalogAction
+from app.models.category import Category
 from app.models.role import Role
 from app.models.role_permission import RolePermission
 from app.models.user import User
@@ -35,6 +36,8 @@ def seed_actions(db: Session):
         {"action_code": "update", "action_name": "Update", "description": "Update existing records"},
         {"action_code": "delete", "action_name": "Delete", "description": "Delete records"},
         {"action_code": "export", "action_name": "Export", "description": "Export data"},
+        {"action_code": "approve", "action_name": "Approve", "description": "Approve requisitions"},
+        {"action_code": "reject", "action_name": "Reject", "description": "Reject requisitions"},
     ]
     
     created_count = 0
@@ -62,6 +65,7 @@ def seed_catalogs(db: Session):
         {"catalog_code": "retentions", "catalog_name": "Retentions", "description": "Retention management"},
         {"catalog_code": "catalogs", "catalog_name": "Catalogs", "description": "Catalog management"},
         {"catalog_code": "actions", "catalog_name": "Actions", "description": "Action management"},
+        {"catalog_code": "categories", "catalog_name": "Categories", "description": "Category management"},
         {"catalog_code": "permissions", "catalog_name": "Permissions", "description": "Permission management"},
         {"catalog_code": "system_configuration", "catalog_name": "System Configuration", "description": "System settings"},
         {"catalog_code": "audit_logs", "catalog_name": "Audit Logs", "description": "Audit log viewing"},
@@ -95,11 +99,12 @@ def seed_catalog_actions(db: Session):
         "retentions": ["list", "create", "update", "delete", "export"],
         "catalogs": ["list", "create", "update", "delete"],
         "actions": ["list", "create", "update", "delete"],
+        "categories": ["list", "create", "update", "delete"],
         "permissions": ["list", "create", "update", "delete"],
         "system_configuration": ["list", "create", "update"],
         "audit_logs": ["list", "export"],
         "supplier_documents": ["list", "create", "update", "delete"],
-        "requisitions": ["list", "create", "update", "delete", "export"],
+        "requisitions": ["list", "create", "update", "delete", "export","approve", "reject"],
     }
     
     created_count = 0
@@ -129,6 +134,30 @@ def seed_catalog_actions(db: Session):
     
     db.commit()
     print(f"   ✅ Created {created_count} catalog-action combinations")
+
+
+def seed_categories(db: Session):
+    """Create initial categories."""
+    print("🌱 Seeding Categories...")
+    
+    categories_data = [
+        {"name": "Materiales de Construcción", "description": "Proveedores de materiales de construcción", "is_active": True},
+        {"name": "Equipos y Maquinaria", "description": "Proveedores de equipos y maquinaria", "is_active": True},
+        {"name": "Servicios Profesionales", "description": "Proveedores de servicios profesionales", "is_active": True},
+        {"name": "Tecnología", "description": "Proveedores de tecnología y software", "is_active": True},
+        {"name": "Oficina y Papelería", "description": "Proveedores de suministros de oficina", "is_active": True},
+    ]
+    
+    created_count = 0
+    for category_data in categories_data:
+        existing = db.query(Category).filter(Category.name == category_data["name"]).first()
+        if not existing:
+            category = Category(**category_data)
+            db.add(category)
+            created_count += 1
+    
+    db.commit()
+    print(f"   ✅ Created {created_count} categories")
 
 
 def seed_roles(db: Session):
@@ -189,7 +218,8 @@ def seed_role_permissions(db: Session):
             "projects": ["list", "create", "update", "delete", "export"],
             "accounts": ["list", "create", "update", "delete", "export"],
             "retentions": ["list", "create", "update", "delete", "export"],
-            "requisitions": ["list", "create", "update", "delete", "export"],
+            "categories": ["list", "create", "update", "delete"],
+            "requisitions": ["list", "create", "update", "delete", "export","approve","reject"],
             "system_configuration": ["list", "create", "update"],
             "audit_logs": ["list", "export"],
             "supplier_documents": ["list", "create", "update", "delete"],
@@ -199,6 +229,7 @@ def seed_role_permissions(db: Session):
             "projects": ["list", "create", "update", "export"],
             "accounts": ["list", "create", "update", "export"],
             "retentions": ["list", "create", "update", "export"],
+            "categories": ["list", "create", "update"],
             "requisitions": ["list", "create", "update", "export"],
             "supplier_documents": ["list", "create", "update"],
         },
@@ -207,6 +238,7 @@ def seed_role_permissions(db: Session):
             "projects": ["list"],
             "accounts": ["list", "create", "update"],
             "retentions": ["list", "create", "update"],
+            "categories": ["list"],
             "requisitions": ["list", "create"],
             "supplier_documents": ["list", "create"],
         },
@@ -215,6 +247,7 @@ def seed_role_permissions(db: Session):
             "projects": ["list"],
             "accounts": ["list"],
             "retentions": ["list"],
+            "categories": ["list"],
             "requisitions": ["list"],
             "audit_logs": ["list"],
             "supplier_documents": ["list"],
@@ -358,6 +391,7 @@ def run_seed():
         seed_actions(db)
         seed_catalogs(db)
         seed_catalog_actions(db)
+        seed_categories(db)
         seed_roles(db)
         seed_role_permissions(db)
         seed_users(db)

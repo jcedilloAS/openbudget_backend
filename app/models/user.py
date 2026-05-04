@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, false as sa_false
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database import Base
@@ -20,6 +20,7 @@ class User(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     last_login_at = Column(DateTime(timezone=True), nullable=True)
     is_superuser = Column(Boolean, default=False, nullable=True)
+    must_change_password = Column(Boolean, nullable=True, default=True, server_default=sa_false())
     
     # Relationships
     role = relationship("Role", backref="users")

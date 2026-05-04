@@ -28,6 +28,7 @@ def list_suppliers(
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     created_by: Optional[int] = Query(None, description="Filter by creator user ID"),
+    category_id: Optional[int] = Query(None, description="Filter by category ID"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("suppliers", "list"))
 ):
@@ -38,11 +39,20 @@ def list_suppliers(
     - **limit**: Maximum number of records to return
     - **is_active**: Optional filter by active status
     - **created_by**: Optional filter by creator user ID
+    - **category_id**: Optional filter by category ID
     """
-    suppliers = supplier.get_multi(db, skip=skip, limit=limit, is_active=is_active, created_by=created_by)
-    total = supplier.count(db, is_active=is_active, created_by=created_by)
+    suppliers_list = supplier.get_multi(db, skip=skip, limit=limit, is_active=is_active, created_by=created_by, category_id=category_id)
+    total = supplier.count(db, is_active=is_active, created_by=created_by, category_id=category_id)
     
-    return SupplierList(total=total, items=suppliers)
+    # Add category_name to each supplier from the loaded relationship
+    items = []
+    for s in suppliers_list:
+        supplier_data = Supplier.model_validate(s)
+        if hasattr(s, 'category') and s.category:
+            supplier_data.category_name = s.category.name
+        items.append(supplier_data)
+    
+    return SupplierList(total=total, items=items)
 
 
 @router.get("/search", response_model=SupplierList, summary="Search suppliers")
@@ -60,8 +70,17 @@ def search_suppliers(
     - **skip**: Number of records to skip
     - **limit**: Maximum number of records to return
     """
-    suppliers = supplier.search(db, search_term=q, skip=skip, limit=limit)
-    return SupplierList(total=len(suppliers), items=suppliers)
+    suppliers_list = supplier.search(db, search_term=q, skip=skip, limit=limit)
+    
+    # Add category_name to each supplier from the loaded relationship
+    items = []
+    for s in suppliers_list:
+        supplier_data = Supplier.model_validate(s)
+        if hasattr(s, 'category') and s.category:
+            supplier_data.category_name = s.category.name
+        items.append(supplier_data)
+    
+    return SupplierList(total=len(suppliers_list), items=items)
 
 
 @router.get("/{supplier_id}", response_model=SupplierWithDocuments, summary="Get supplier by ID")
@@ -83,7 +102,12 @@ def get_supplier(
             detail=f"Supplier with id {supplier_id} not found"
         )
     
-    return db_supplier
+    # Add category_name from the loaded relationship
+    supplier_data = SupplierWithDocuments.model_validate(db_supplier)
+    if hasattr(db_supplier, 'category') and db_supplier.category:
+        supplier_data.category_name = db_supplier.category.name
+    
+    return supplier_data
 
 
 @router.get("/code/{supplier_code}", response_model=SupplierWithDocuments, summary="Get supplier by code")
@@ -105,7 +129,12 @@ def get_supplier_by_code(
             detail=f"Supplier with code '{supplier_code}' not found"
         )
     
-    return db_supplier
+    # Add category_name from the loaded relationship
+    supplier_data = SupplierWithDocuments.model_validate(db_supplier)
+    if hasattr(db_supplier, 'category') and db_supplier.category:
+        supplier_data.category_name = db_supplier.category.name
+    
+    return supplier_data
 
 
 @router.post("/", response_model=SupplierWithDocuments, status_code=status.HTTP_201_CREATED, summary="Create new supplier")
@@ -169,7 +198,18 @@ async def create_supplier(
     if documents:
         supplier_in.documents = documents
     
-    return supplier.create(db, supplier_in=supplier_in, user_id=current_user.id)
+    db_supplier = supplier.create(db, supplier_in=supplier_in, user_id=current_user.id)
+    
+    # Reload with category relationship
+    db.refresh(db_supplier)
+    db_supplier = supplier.get(db, supplier_id=db_supplier.id)
+    
+    # Add category_name from the loaded relationship
+    supplier_data_response = SupplierWithDocuments.model_validate(db_supplier)
+    if hasattr(db_supplier, 'category') and db_supplier.category:
+        supplier_data_response.category_name = db_supplier.category.name
+    
+    return supplier_data_response
 
 
 @router.put("/{supplier_id}", response_model=SupplierWithDocuments, summary="Update supplier")
@@ -265,7 +305,16 @@ async def update_supplier(
             detail=f"Supplier with id {supplier_id} not found"
         )
     
-    return db_supplier
+    # Reload with category relationship
+    db.refresh(db_supplier)
+    db_supplier = supplier.get(db, supplier_id=db_supplier.id)
+    
+    # Add category_name from the loaded relationship
+    supplier_data_response = SupplierWithDocuments.model_validate(db_supplier)
+    if hasattr(db_supplier, 'category') and db_supplier.category:
+        supplier_data_response.category_name = db_supplier.category.name
+    
+    return supplier_data_response
 
 
 @router.delete("/{supplier_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete supplier")

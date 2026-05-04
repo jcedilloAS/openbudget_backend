@@ -13,6 +13,7 @@ ALLOWED_EXTENSIONS = {
     ".jpeg": ["image/jpeg"],
     ".png": ["image/png"],
     ".webp": ["image/webp"],
+    ".svg": ["image/svg+xml"],
     # Documents
     ".pdf": ["application/pdf"],
     ".docx": ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"],

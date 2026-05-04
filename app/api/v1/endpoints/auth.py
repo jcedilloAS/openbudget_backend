@@ -1,25 +1,35 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
-from sqlalchemy.orm import Session
-from pydantic import BaseModel, Field
-from datetime import datetime
+import hashlib
+import logging
+import secrets
+from datetime import datetime, timedelta, timezone
 
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
+from pydantic import BaseModel, EmailStr, Field
+from sqlalchemy.orm import Session
+
+from app.core.config import settings
 from app.core.database import get_db
+from app.core.dependencies import get_current_user_from_cookie, get_current_user_with_permissions, get_user_permissions
 from app.core.security import (
-    verify_password,
-    create_access_token,
-    create_refresh_token,
-    set_access_token_cookie,
-    set_refresh_token_cookie,
+    decode_token,
     delete_access_token_cookie,
     delete_refresh_token_cookie,
+    create_access_token,
+    create_refresh_token,
+    get_password_hash,
     get_token_from_cookie,
-    decode_token
+    set_access_token_cookie,
+    set_refresh_token_cookie,
+    verify_password,
 )
-from app.core.config import settings
-from app.core.dependencies import get_current_user_from_cookie, get_current_user_with_permissions, get_user_permissions
-from app.models.user import User
+from app.crud.password_reset import password_reset as password_reset_crud
+from app.crud.system_configuration import system_configuration as system_config_crud
 from app.crud.user import user as user_crud
+from app.models.user import User
 from app.schemas.user import UserWithPermissions, PermissionItem
+from app.utils.email import send_email
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -107,6 +117,7 @@ def login(
             "name": db_user.name,
             "email": db_user.email,
             "is_active": db_user.is_active,
+            "must_change_password": db_user.must_change_password,
             "role": {
                 "id": db_user.role.id,
                 "role_code": db_user.role.role_code,
@@ -214,8 +225,128 @@ def get_current_user_info(
 ):
     """
     Get current authenticated user information with all available permissions.
-    
+
     - Requires valid access token in cookie or Authorization header
     - Returns user details, role, and list of permissions
     """
     return user_with_permissions
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=8)
+
+
+class MessageResponse(BaseModel):
+    message: str
+
+
+@router.post("/forgot-password", response_model=MessageResponse)
+def forgot_password(body: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    """
+    Request a password reset link.
+    Always returns 200 regardless of whether the email exists.
+    """
+    _GENERIC_MSG = "Si el correo existe en el sistema, recibirás instrucciones para restablecer tu contraseña."
+
+    db_user = user_crud.get_by_email(db, email=body.email)
+    if not db_user or not db_user.is_active:
+        return MessageResponse(message=_GENERIC_MSG)
+
+    # Invalidate any previous unused tokens
+    password_reset_crud.invalidate_user_tokens(db, user_id=db_user.id)
+
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    expires_at = datetime.now(tz=timezone.utc) + timedelta(hours=1)
+
+    password_reset_crud.create(db, user_id=db_user.id, token_hash=token_hash, expires_at=expires_at)
+
+    reset_link = f"{settings.FRONTEND_URL}/reset-password?token={raw_token}"
+    print(reset_link)
+    html_body = f"""
+    <p>Recibiste este correo porque solicitaste restablecer tu contraseña.</p>
+    <p>Haz clic en el siguiente enlace para continuar (válido por 1 hora):</p>
+    <p><a href="{reset_link}">{reset_link}</a></p>
+    <p>Si no solicitaste esto, puedes ignorar este mensaje.</p>
+    """
+    smtp_config_record = system_config_crud.get_active(db)
+    if smtp_config_record:
+        smtp_cfg = {
+            "host": smtp_config_record.smtp_host,
+            "port": smtp_config_record.smtp_port,
+            "username": smtp_config_record.smtp_username,
+            "password": smtp_config_record.smtp_password,
+            "encryption": smtp_config_record.smtp_encryption,
+        }
+        print("Intentando enviar correo de recuperación a %s", body.email)
+        try:
+            send_email(smtp_cfg, body.email, "Restablecer contraseña", html_body)
+        except Exception as exc:
+            logger.error("Fallo al enviar correo de recuperación: %s", exc)
+    else:
+        logger.warning("No hay configuración SMTP activa; no se envió correo de recuperación")
+
+    return MessageResponse(message=_GENERIC_MSG)
+
+
+@router.post("/reset-password", response_model=MessageResponse)
+def reset_password(body: ResetPasswordRequest, db: Session = Depends(get_db)):
+    """
+    Reset password using a valid, non-expired token.
+    """
+    token_hash = hashlib.sha256(body.token.encode()).hexdigest()
+    reset_record = password_reset_crud.get_by_token_hash(db, token_hash=token_hash)
+
+    now = datetime.now(tz=timezone.utc)
+    if (
+        not reset_record
+        or reset_record.used
+        or reset_record.expires_at.replace(tzinfo=timezone.utc) <= now
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token inválido o expirado",
+        )
+
+    db_user = db.query(User).filter(User.id == reset_record.user_id).first()
+    if not db_user or not db_user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token inválido o expirado",
+        )
+
+    db_user.password_hash = get_password_hash(body.new_password)
+    db_user.must_change_password = False
+    password_reset_crud.mark_as_used(db, reset_record)
+    db.commit()
+
+    return MessageResponse(message="Contraseña actualizada correctamente")
+
+
+class SetPasswordRequest(BaseModel):
+    current_password: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=8)
+
+
+@router.post("/set-password", response_model=MessageResponse)
+def set_password(
+    body: SetPasswordRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_cookie),
+):
+    """
+    Set a new password for the authenticated user (replaces a temporary password).
+    Clears must_change_password flag on success.
+    """
+    user_crud.set_password(
+        db,
+        db_user=current_user,
+        current_password=body.current_password,
+        new_password=body.new_password,
+    )
+    return MessageResponse(message="Contraseña actualizada correctamente")

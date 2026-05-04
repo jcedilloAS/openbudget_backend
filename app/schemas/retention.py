@@ -10,6 +10,7 @@ class RetentionBase(BaseModel):
     description: Optional[str] = Field(None, max_length=255, description="Retention description")
     percentage: Decimal = Field(..., ge=0, le=100, description="Retention percentage (0-100)")
     is_active: bool = Field(default=True, description="Whether the retention is active")
+    due_date: Optional[datetime] = Field(None, description="Due date for the retention")
 
 
 class RetentionCreate(RetentionBase):
@@ -23,6 +24,7 @@ class RetentionUpdate(BaseModel):
     description: Optional[str] = Field(None, max_length=255, description="Retention description")
     percentage: Optional[Decimal] = Field(None, ge=0, le=100, description="Retention percentage (0-100)")
     is_active: Optional[bool] = Field(None, description="Whether the retention is active")
+    due_date: Optional[datetime] = Field(None, description="Due date for the retention")
 
 
 class RetentionInDB(RetentionBase):

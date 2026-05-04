@@ -48,6 +48,25 @@ def list_projects(
     return ProjectList(total=total, items=projects)
 
 
+@router.get("/search", response_model=ProjectList, summary="Search projects")
+def search_projects(
+    q: str = Query(..., min_length=1, description="Search term (project code, name, or description)"),
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("projects", "list"))
+):
+    """
+    Search projects by project code, name, or description.
+
+    - **q**: Search term (minimum 1 character)
+    - **skip**: Number of records to skip (for pagination)
+    - **limit**: Maximum number of records to return
+    """
+    items = project.search(db, search_term=q, skip=skip, limit=limit)
+    return ProjectList(total=len(items), items=items)
+
+
 @router.get("/summary", response_model=ProjectSummary, summary="Get projects budget summary")
 def get_projects_summary(
     status: Optional[str] = Query(None, description="Filter by status"),
@@ -64,7 +83,7 @@ def get_projects_summary(
     return project.get_summary(db, status=status)
 
 
-@router.get("/{project_id}", response_model=ProjectWithUsers, summary="Get project by ID")
+@router.get("/{project_id}", response_model=Project, summary="Get project by ID")
 def get_project(
     project_id: int,
     db: Session = Depends(get_db),

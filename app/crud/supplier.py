@@ -1,10 +1,11 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from fastapi import HTTPException, status
 
 from app.models.supplier import Supplier
 from app.models.supplier_document import SupplierDocument
+from app.models.supplier_retention import SupplierRetention
 from app.schemas.supplier import SupplierCreate, SupplierUpdate
 
 
@@ -13,11 +14,29 @@ class CRUDSupplier:
     
     def get(self, db: Session, supplier_id: int) -> Optional[Supplier]:
         """Get a single supplier by ID."""
-        return db.query(Supplier).filter(Supplier.id == supplier_id).first()
+        return (
+            db.query(Supplier)
+            .options(
+                joinedload(Supplier.category),
+                joinedload(Supplier.documents),
+                joinedload(Supplier.supplier_retentions).joinedload(SupplierRetention.retention),
+            )
+            .filter(Supplier.id == supplier_id)
+            .first()
+        )
     
     def get_by_supplier_code(self, db: Session, supplier_code: str) -> Optional[Supplier]:
         """Get a single supplier by supplier code."""
-        return db.query(Supplier).filter(Supplier.supplier_code == supplier_code).first()
+        return (
+            db.query(Supplier)
+            .options(
+                joinedload(Supplier.category),
+                joinedload(Supplier.documents),
+                joinedload(Supplier.supplier_retentions).joinedload(SupplierRetention.retention),
+            )
+            .filter(Supplier.supplier_code == supplier_code)
+            .first()
+        )
     
     def get_multi(
         self, 
@@ -25,10 +44,11 @@ class CRUDSupplier:
         skip: int = 0, 
         limit: int = 100,
         is_active: Optional[bool] = None,
-        created_by: Optional[int] = None
+        created_by: Optional[int] = None,
+        category_id: Optional[int] = None
     ) -> List[Supplier]:
         """Get multiple suppliers with pagination and optional filtering."""
-        query = db.query(Supplier)
+        query = db.query(Supplier).options(joinedload(Supplier.category))
         
         if is_active is not None:
             query = query.filter(Supplier.is_active == is_active)
@@ -36,13 +56,17 @@ class CRUDSupplier:
         if created_by is not None:
             query = query.filter(Supplier.created_by == created_by)
         
+        if category_id is not None:
+            query = query.filter(Supplier.category_id == category_id)
+        
         return query.offset(skip).limit(limit).all()
     
     def count(
         self, 
         db: Session, 
         is_active: Optional[bool] = None,
-        created_by: Optional[int] = None
+        created_by: Optional[int] = None,
+        category_id: Optional[int] = None
     ) -> int:
         """Count total suppliers with optional filtering."""
         query = db.query(Supplier)
@@ -52,6 +76,9 @@ class CRUDSupplier:
         
         if created_by is not None:
             query = query.filter(Supplier.created_by == created_by)
+        
+        if category_id is not None:
+            query = query.filter(Supplier.category_id == category_id)
         
         return query.count()
     
@@ -65,7 +92,7 @@ class CRUDSupplier:
                 detail=f"Supplier with code '{supplier_in.supplier_code}' already exists"
             )
         
-        supplier_data = supplier_in.model_dump(exclude={"documents"})
+        supplier_data = supplier_in.model_dump(exclude={"documents", "retentions"})
         db_supplier = Supplier(
             **supplier_data,
             created_by=user_id,
@@ -86,6 +113,16 @@ class CRUDSupplier:
                         updated_by=user_id
                     )
                     db.add(db_doc)
+
+            if supplier_in.retentions:
+                for ret in supplier_in.retentions:
+                    db_ret = SupplierRetention(
+                        supplier_id=db_supplier.id,
+                        retention_id=ret.retention_id,
+                        created_by=user_id,
+                        updated_by=user_id,
+                    )
+                    db.add(db_ret)
             
             db.commit()
             db.refresh(db_supplier)
@@ -122,6 +159,7 @@ class CRUDSupplier:
         # Update only provided fields
         update_data = supplier_in.model_dump(exclude_unset=True)
         documents_data = update_data.pop("documents", None)
+        retentions_data = update_data.pop("retentions", None)
         update_data["updated_by"] = user_id
         
         for field, value in update_data.items():
@@ -164,7 +202,28 @@ class CRUDSupplier:
                             updated_by=user_id
                         )
                         db.add(db_doc)
-            
+
+            # Sync retentions if provided (upsert by retention_id)
+            if retentions_data is not None:
+                incoming_retention_ids = {ret["retention_id"] for ret in retentions_data}
+
+                for existing_ret in list(db_supplier.supplier_retentions):
+                    if existing_ret.retention_id not in incoming_retention_ids:
+                        db.delete(existing_ret)
+
+                existing_retention_ids = {
+                    ret.retention_id for ret in db_supplier.supplier_retentions
+                }
+                for ret in retentions_data:
+                    if ret["retention_id"] not in existing_retention_ids:
+                        db_ret = SupplierRetention(
+                            supplier_id=db_supplier.id,
+                            retention_id=ret["retention_id"],
+                            created_by=user_id,
+                            updated_by=user_id,
+                        )
+                        db.add(db_ret)
+
             db.commit()
             db.refresh(db_supplier)
             return db_supplier
@@ -207,7 +266,7 @@ class CRUDSupplier:
     ) -> List[Supplier]:
         """Search suppliers by name, code, or RFC."""
         search_pattern = f"%{search_term}%"
-        return db.query(Supplier).filter(
+        return db.query(Supplier).options(joinedload(Supplier.category)).filter(
             (Supplier.name.ilike(search_pattern)) |
             (Supplier.supplier_code.ilike(search_pattern)) |
             (Supplier.rfc.ilike(search_pattern))

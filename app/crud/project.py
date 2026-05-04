@@ -432,6 +432,22 @@ class CRUDProject:
             .limit(limit)\
             .all()
 
+    def search(self, db: Session, search_term: str, skip: int = 0, limit: int = 100) -> List[Project]:
+        """Search projects by project_code, name, or description."""
+        pattern = f"%{search_term}%"
+        return (
+            db.query(Project)
+            .filter(
+                (Project.project_code.ilike(pattern)) |
+                (Project.name.ilike(pattern)) |
+                (Project.description.ilike(pattern))
+            )
+            .order_by(Project.id)
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+
     def bulk_create(
         self,
         db: Session,
