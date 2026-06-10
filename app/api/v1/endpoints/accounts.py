@@ -35,6 +35,27 @@ def list_accounts(
     return AccountList(total=total, items=accounts)
 
 
+@router.get("/search", response_model=AccountList, summary="Search accounts")
+def search_accounts(
+    q: str = Query(..., min_length=1, description="Search term for account_number or description"),
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
+    is_active: Optional[bool] = Query(None, description="Filter by active status"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("accounts", "list"))
+):
+    """
+    Search accounts by account_number or description (case-insensitive).
+
+    - **q**: Search term (required)
+    - **skip**: Pagination offset
+    - **limit**: Maximum records to return
+    - **is_active**: Optional filter by active status
+    """
+    items, total = account.search(db, q=q, skip=skip, limit=limit, is_active=is_active)
+    return AccountList(total=total, items=items)
+
+
 @router.get("/{account_id}", response_model=Account, summary="Get account by ID")
 def get_account(
     account_id: int,

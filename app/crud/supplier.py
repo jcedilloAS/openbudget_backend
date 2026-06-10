@@ -1,3 +1,4 @@
+from datetime import date, datetime
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
@@ -6,6 +7,8 @@ from fastapi import HTTPException, status
 from app.models.supplier import Supplier
 from app.models.supplier_document import SupplierDocument
 from app.models.supplier_retention import SupplierRetention
+from app.models.supplier_contact import SupplierContact
+from app.models.requisition import Requisition
 from app.schemas.supplier import SupplierCreate, SupplierUpdate
 
 
@@ -20,11 +23,12 @@ class CRUDSupplier:
                 joinedload(Supplier.category),
                 joinedload(Supplier.documents),
                 joinedload(Supplier.supplier_retentions).joinedload(SupplierRetention.retention),
+                joinedload(Supplier.contacts),
             )
             .filter(Supplier.id == supplier_id)
             .first()
         )
-    
+
     def get_by_supplier_code(self, db: Session, supplier_code: str) -> Optional[Supplier]:
         """Get a single supplier by supplier code."""
         return (
@@ -33,6 +37,7 @@ class CRUDSupplier:
                 joinedload(Supplier.category),
                 joinedload(Supplier.documents),
                 joinedload(Supplier.supplier_retentions).joinedload(SupplierRetention.retention),
+                joinedload(Supplier.contacts),
             )
             .filter(Supplier.supplier_code == supplier_code)
             .first()
@@ -59,7 +64,7 @@ class CRUDSupplier:
         if category_id is not None:
             query = query.filter(Supplier.category_id == category_id)
         
-        return query.offset(skip).limit(limit).all()
+        return query.order_by(Supplier.id.asc()).offset(skip).limit(limit).all()
     
     def count(
         self, 
@@ -92,7 +97,7 @@ class CRUDSupplier:
                 detail=f"Supplier with code '{supplier_in.supplier_code}' already exists"
             )
         
-        supplier_data = supplier_in.model_dump(exclude={"documents", "retentions"})
+        supplier_data = supplier_in.model_dump(exclude={"documents", "retentions", "contacts"})
         db_supplier = Supplier(
             **supplier_data,
             created_by=user_id,
@@ -123,7 +128,19 @@ class CRUDSupplier:
                         updated_by=user_id,
                     )
                     db.add(db_ret)
-            
+
+            if supplier_in.contacts:
+                for c in supplier_in.contacts:
+                    db.add(SupplierContact(
+                        supplier_id=db_supplier.id,
+                        name=c.name,
+                        email=c.email,
+                        telephone=c.telephone,
+                        address=c.address,
+                        created_by=user_id,
+                        updated_by=user_id,
+                    ))
+
             db.commit()
             db.refresh(db_supplier)
             return db_supplier
@@ -160,6 +177,7 @@ class CRUDSupplier:
         update_data = supplier_in.model_dump(exclude_unset=True)
         documents_data = update_data.pop("documents", None)
         retentions_data = update_data.pop("retentions", None)
+        contacts_data = update_data.pop("contacts", None)
         update_data["updated_by"] = user_id
         
         for field, value in update_data.items():
@@ -224,6 +242,36 @@ class CRUDSupplier:
                         )
                         db.add(db_ret)
 
+            # Sync contacts if provided (upsert by id)
+            if contacts_data is not None:
+                incoming_ids = {c["id"] for c in contacts_data if c.get("id")}
+
+                for existing_contact in list(db_supplier.contacts):
+                    if existing_contact.id not in incoming_ids:
+                        db.delete(existing_contact)
+
+                existing_map = {c.id: c for c in db_supplier.contacts if c.id in incoming_ids}
+
+                for c in contacts_data:
+                    c_id = c.get("id")
+                    if c_id and c_id in existing_map:
+                        existing = existing_map[c_id]
+                        existing.name = c["name"]
+                        existing.email = c.get("email")
+                        existing.telephone = c.get("telephone")
+                        existing.address = c.get("address")
+                        existing.updated_by = user_id
+                    else:
+                        db.add(SupplierContact(
+                            supplier_id=db_supplier.id,
+                            name=c["name"],
+                            email=c.get("email"),
+                            telephone=c.get("telephone"),
+                            address=c.get("address"),
+                            created_by=user_id,
+                            updated_by=user_id,
+                        ))
+
             db.commit()
             db.refresh(db_supplier)
             return db_supplier
@@ -233,7 +281,7 @@ class CRUDSupplier:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Database integrity error occurred. Check if user IDs exist."
             )
-    
+
     def delete(self, db: Session, supplier_id: int) -> Optional[Supplier]:
         """Delete a supplier."""
         db_supplier = self.get(db, supplier_id)
@@ -258,8 +306,8 @@ class CRUDSupplier:
         return db_supplier
     
     def search(
-        self, 
-        db: Session, 
+        self,
+        db: Session,
         search_term: str,
         skip: int = 0,
         limit: int = 100
@@ -270,7 +318,31 @@ class CRUDSupplier:
             (Supplier.name.ilike(search_pattern)) |
             (Supplier.supplier_code.ilike(search_pattern)) |
             (Supplier.rfc.ilike(search_pattern))
-        ).offset(skip).limit(limit).all()
+        ).order_by(Supplier.id.asc()).offset(skip).limit(limit).all()
+
+    def get_by_projects(
+        self,
+        db: Session,
+        project_ids: List[int],
+        date_from: Optional[date] = None,
+        date_to: Optional[date] = None,
+    ) -> List[Supplier]:
+        """Return distinct suppliers that have at least one requisition in the given projects."""
+        if not project_ids:
+            return []
+
+        query = (
+            db.query(Supplier)
+            .options(joinedload(Supplier.category))
+            .join(Requisition, Requisition.supplier_id == Supplier.id)
+            .filter(Requisition.project_id.in_(project_ids))
+        )
+        if date_from is not None:
+            query = query.filter(Requisition.created_at >= datetime.combine(date_from, datetime.min.time()))
+        if date_to is not None:
+            query = query.filter(Requisition.created_at <= datetime.combine(date_to, datetime.max.time()))
+
+        return query.distinct().order_by(Supplier.id.asc()).all()
 
 
 supplier = CRUDSupplier()

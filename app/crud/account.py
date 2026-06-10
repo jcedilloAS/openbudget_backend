@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import or_
 from typing import List, Optional, Tuple
 from fastapi import HTTPException, status
 
@@ -34,6 +35,28 @@ class CRUDAccount:
         
         return query.offset(skip).limit(limit).all()
     
+    def search(
+        self,
+        db: Session,
+        q: str,
+        skip: int = 0,
+        limit: int = 100,
+        is_active: Optional[bool] = None,
+    ) -> Tuple[List[Account], int]:
+        """Search accounts by account_number or description (case-insensitive)."""
+        pattern = f"%{q}%"
+        query = db.query(Account).filter(
+            or_(
+                Account.account_number.ilike(pattern),
+                Account.description.ilike(pattern),
+            )
+        )
+        if is_active is not None:
+            query = query.filter(Account.is_active == is_active)
+        total = query.count()
+        items = query.offset(skip).limit(limit).all()
+        return items, total
+
     def count(self, db: Session, is_active: Optional[bool] = None) -> int:
         """Count total accounts with optional filtering."""
         query = db.query(Account)

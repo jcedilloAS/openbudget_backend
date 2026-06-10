@@ -42,13 +42,17 @@ class CRUDSystemConfiguration:
                     'smtp_host': config_in.smtp_host,
                     'smtp_port': config_in.smtp_port,
                     'smtp_username': config_in.smtp_username,
-                    'smtp_password': config_in.smtp_password,
                     'smtp_encryption': config_in.smtp_encryption,
-                    'logo_url': config_in.logo_url,
                     'requisition_serie': config_in.requisition_serie,
                     'requisition_folio_next': config_in.requisition_folio_next
                 }
-                
+
+                # Empty/None means "keep existing value" for these fields.
+                if config_in.smtp_password:
+                    fields_to_update['smtp_password'] = config_in.smtp_password
+                if config_in.logo_url:
+                    fields_to_update['logo_url'] = config_in.logo_url
+
                 for field, value in fields_to_update.items():
                     old_value = getattr(existing_config, field)
                     if old_value != value:
@@ -149,7 +153,13 @@ class CRUDSystemConfiguration:
             return None
         
         update_data = config_in.model_dump(exclude_unset=True)
-        
+
+        # Empty/None means "keep existing value" for these fields.
+        if 'smtp_password' in update_data and not update_data['smtp_password']:
+            update_data.pop('smtp_password')
+        if 'logo_url' in update_data and not update_data['logo_url']:
+            update_data.pop('logo_url')
+
         if not update_data:
             return db_config
         

@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     # File Upload
     UPLOAD_DIR: str = "/app/uploads"
     MAX_UPLOAD_SIZE_MB: int = 10
+
+    # Banxico
+    TOKEN_BANXICO: str = ""
     
     class Config:
         env_file = ".env"

@@ -1,6 +1,13 @@
 from typing import List, Optional
+import io
 import json
+from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
+
+
+import openpyxl
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Form
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -81,6 +88,36 @@ def search_suppliers(
         items.append(supplier_data)
     
     return SupplierList(total=len(suppliers_list), items=items)
+
+
+@router.get("/by-projects", response_model=SupplierList, summary="List suppliers related to given projects via requisitions")
+def list_suppliers_by_projects(
+    project_id: List[int] = Query(..., description="Project IDs (one or more)"),
+    date_from: Optional[date] = Query(None, description="Filter requisitions from this date (YYYY-MM-DD)"),
+    date_to: Optional[date] = Query(None, description="Filter requisitions up to this date (YYYY-MM-DD)"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("suppliers", "list"))
+):
+    """
+    Retrieve suppliers that have at least one requisition in any of the given projects,
+    optionally filtered by requisition creation date.
+
+    - **project_id**: One or more project IDs (repeat the param for multiple values)
+    - **date_from**: Optional inclusive lower bound on requisition.created_at
+    - **date_to**: Optional inclusive upper bound on requisition.created_at
+    """
+    suppliers_list = supplier.get_by_projects(
+        db, project_ids=project_id, date_from=date_from, date_to=date_to
+    )
+
+    items = []
+    for s in suppliers_list:
+        supplier_data = Supplier.model_validate(s)
+        if hasattr(s, 'category') and s.category:
+            supplier_data.category_name = s.category.name
+        items.append(supplier_data)
+
+    return SupplierList(total=len(items), items=items)
 
 
 @router.get("/{supplier_id}", response_model=SupplierWithDocuments, summary="Get supplier by ID")
@@ -315,6 +352,145 @@ async def update_supplier(
         supplier_data_response.category_name = db_supplier.category.name
     
     return supplier_data_response
+
+
+_EXCEL_COLUMN_MAP = {
+    "ORIGEN": "origin",
+    "CLAVE": "supplier_code",
+    "PROVEEDORES": "name",
+    "IVA 8%-16%": "percentage_iva",
+    "ISR RETENIDO HONORARIOS": "isr_withheld_professional_fees",
+    "ISR RETENIDO RESICO": "isr_withheld_resico",
+    "IVA RETENIDO HONORARIOS": "iva_withheld_professional_fees",
+    "IVA RETENIDO RESICO": "iva_withheld_resico",
+    "IVA RETENIDO FLETES": "iva_withheld_freight",
+    "FECHA INICIO": "tax_start_date",
+    "FECHA FIN": "tax_end_date",
+}
+
+_DECIMAL_FIELDS = {
+    "percentage_iva", "isr_withheld_professional_fees", "isr_withheld_resico",
+    "iva_withheld_professional_fees", "iva_withheld_resico", "iva_withheld_freight",
+}
+_DATE_FIELDS = {"tax_start_date", "tax_end_date"}
+_ORIGIN_VALUES = {"NACIONAL", "EXTRANJERA"}
+
+
+def _parse_excel_row(row_data: dict) -> dict:
+    result = {}
+    for field, raw in row_data.items():
+        if raw is None or raw == "":
+            result[field] = None
+            continue
+        if field in _DECIMAL_FIELDS:
+            try:
+                result[field] = Decimal(str(raw))
+            except InvalidOperation:
+                result[field] = None
+        elif field in _DATE_FIELDS:
+            if isinstance(raw, (datetime, date)):
+                result[field] = raw.date() if isinstance(raw, datetime) else raw
+            else:
+                try:
+                    result[field] = date.fromisoformat(str(raw).strip())
+                except ValueError:
+                    result[field] = None
+        elif field == "origin":
+            val = str(raw).strip().upper()
+            result[field] = val if val in _ORIGIN_VALUES else None
+        else:
+            result[field] = str(raw).strip() if raw is not None else None
+    return result
+
+
+class SupplierImportResult(BaseModel):
+    created: int
+    updated: int
+    errors: List[dict]
+
+
+@router.post("/import", response_model=SupplierImportResult, summary="Bulk import suppliers from Excel")
+async def import_suppliers_excel(
+    file: UploadFile = File(..., description="Excel file (.xlsx) with supplier data"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("suppliers", "create")),
+):
+    """
+    Bulk import or update suppliers from an Excel file.
+
+    Expected columns (order matters, header row required):
+    ORIGEN | CLAVE | PROVEEDORES | IVA 8%-16% | ISR RETENIDO HONORARIOS |
+    ISR RETENIDO RESICO | IVA RETENIDO HONORARIOS | IVA RETENIDO RESICO |
+    IVA RETENIDO FLETES | FECHA INICIO | FECHA FIN
+
+    - Rows with an existing CLAVE are **updated**.
+    - Rows with a new CLAVE are **created**.
+    - Errors per row are collected and returned without stopping the import.
+    """
+    if not file.filename or not file.filename.lower().endswith(".xlsx"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only .xlsx files are supported")
+
+    content = await file.read()
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Could not read Excel file: {exc}")
+
+    ws = wb.active
+    rows = list(ws.iter_rows(values_only=True))
+    if not rows:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="The file is empty")
+
+    # Build column index from header row
+    header = [str(h).strip().upper() if h is not None else "" for h in rows[0]]
+    col_index = {}
+    for excel_col, field in _EXCEL_COLUMN_MAP.items():
+        try:
+            col_index[field] = header.index(excel_col.upper())
+        except ValueError:
+            pass
+
+    required = {"supplier_code", "name"}
+    missing = required - col_index.keys()
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Required columns not found in header: {', '.join(missing)}",
+        )
+
+    created = 0
+    updated = 0
+    errors: List[dict] = []
+
+    for row_num, row in enumerate(rows[1:], start=2):
+        raw = {field: (row[idx] if idx < len(row) else None) for field, idx in col_index.items()}
+        parsed = _parse_excel_row(raw)
+
+        supplier_code = parsed.get("supplier_code")
+        if not supplier_code:
+            errors.append({"row": row_num, "message": "CLAVE (supplier_code) is empty, row skipped"})
+            continue
+
+        try:
+            existing = supplier.get_by_supplier_code(db, supplier_code)
+            if existing:
+                supplier_in = SupplierUpdate(**{k: v for k, v in parsed.items() if v is not None})
+                supplier.update(db, supplier_id=existing.id, supplier_in=supplier_in, user_id=current_user.id)
+                updated += 1
+            else:
+                name = parsed.get("name")
+                if not name:
+                    errors.append({"row": row_num, "message": "PROVEEDORES (name) is empty for new supplier, row skipped"})
+                    continue
+                supplier_in = SupplierCreate(**parsed)
+                supplier.create(db, supplier_in=supplier_in, user_id=current_user.id)
+                created += 1
+        except HTTPException as exc:
+            errors.append({"row": row_num, "message": exc.detail})
+        except Exception as exc:
+            errors.append({"row": row_num, "message": str(exc)})
+
+    return SupplierImportResult(created=created, updated=updated, errors=errors)
 
 
 @router.delete("/{supplier_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete supplier")

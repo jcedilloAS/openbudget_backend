@@ -1,16 +1,18 @@
+from decimal import Decimal
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from typing import List, Optional
 from fastapi import HTTPException, status
-from datetime import datetime
+from datetime import date, datetime
 
 from app.models.requisition import Requisition
 from app.models.requisition_item import RequisitionItem
+from app.models.supplier import Supplier
 from app.models.requisition_document import RequisitionDocument
 from app.models.requisition_retention import RequisitionRetention
 from app.models.project import Project
-from app.schemas.requisition import RequisitionCreate, RequisitionUpdate
+from app.schemas.requisition import RequisitionCreate, RequisitionUpdate, RequisitionAssignPurchaseOrder
 from app.utils.audit import AuditLogger
 
 
@@ -37,38 +39,44 @@ class CRUDRequisition:
         return db.query(Requisition).filter(Requisition.requisition_number == requisition_number).first()
     
     def get_multi(
-        self, 
-        db: Session, 
-        skip: int = 0, 
+        self,
+        db: Session,
+        skip: int = 0,
         limit: int = 100,
         project_id: Optional[int] = None,
         supplier_id: Optional[int] = None,
         requested_by: Optional[int] = None,
         status: Optional[str] = None,
-        created_by: Optional[int] = None
+        created_by: Optional[int] = None,
+        viewer_id: Optional[int] = None
     ) -> List[Requisition]:
         """Get multiple requisitions with pagination and optional filtering."""
         query = db.query(Requisition)
-        
+
         if project_id is not None:
             query = query.filter(Requisition.project_id == project_id)
-        
+
         if supplier_id is not None:
             query = query.filter(Requisition.supplier_id == supplier_id)
-        
-        if requested_by is not None:
-            query = query.filter(Requisition.requested_by == requested_by)
-        
+
+        if viewer_id is not None:
+            query = query.filter(
+                or_(Requisition.requested_by == viewer_id, Requisition.created_by == viewer_id)
+            )
+        else:
+            if requested_by is not None:
+                query = query.filter(Requisition.requested_by == requested_by)
+            if created_by is not None:
+                query = query.filter(Requisition.created_by == created_by)
+
         if status is not None:
             query = query.filter(Requisition.status == status)
-        
-        if created_by is not None:
-            query = query.filter(Requisition.created_by == created_by)
         
         return (
             query
             .options(
                 joinedload(Requisition.supplier),
+                joinedload(Requisition.project),
                 joinedload(Requisition.creator),
             )
             .order_by(Requisition.created_at.desc())
@@ -76,34 +84,101 @@ class CRUDRequisition:
             .limit(limit)
             .all()
         )
-    
+
+    def get_for_export(
+        self,
+        db: Session,
+        project_id: Optional[List[int]] = None,
+        supplier_id: Optional[List[int]] = None,
+        status: Optional[str] = None,
+        created_by: Optional[int] = None,
+    ) -> List[Requisition]:
+        query = db.query(Requisition)
+
+        if project_id:
+            query = query.filter(Requisition.project_id.in_(project_id))
+        if supplier_id:
+            query = query.filter(Requisition.supplier_id.in_(supplier_id))
+        if status is not None:
+            query = query.filter(Requisition.status == status)
+        if created_by is not None:
+            query = query.filter(Requisition.created_by == created_by)
+
+        return (
+            query
+            .options(
+                joinedload(Requisition.supplier),
+                joinedload(Requisition.creator),
+            )
+            .order_by(Requisition.created_at.desc())
+            .all()
+        )
+
+    def get_for_report(
+        self,
+        db: Session,
+        date_from: Optional[date] = None,
+        date_to: Optional[date] = None,
+        supplier_id: Optional[List[int]] = None,
+        project_id: Optional[List[int]] = None,
+        status: Optional[str] = None,
+    ) -> List[Requisition]:
+        query = db.query(Requisition)
+
+        if date_from is not None:
+            query = query.filter(Requisition.created_at >= datetime.combine(date_from, datetime.min.time()))
+        if date_to is not None:
+            query = query.filter(Requisition.created_at <= datetime.combine(date_to, datetime.max.time()))
+        if supplier_id:
+            query = query.filter(Requisition.supplier_id.in_(supplier_id))
+        if project_id:
+            query = query.filter(Requisition.project_id.in_(project_id))
+        if status is not None:
+            query = query.filter(Requisition.status == status)
+
+        return (
+            query
+            .options(
+                joinedload(Requisition.supplier),
+                joinedload(Requisition.project),
+                joinedload(Requisition.items).joinedload(RequisitionItem.account),
+            )
+            .order_by(Requisition.created_at.desc())
+            .all()
+        )
+
     def count(
-        self, 
+        self,
         db: Session,
         project_id: Optional[int] = None,
         supplier_id: Optional[int] = None,
         requested_by: Optional[int] = None,
         status: Optional[str] = None,
-        created_by: Optional[int] = None
+        created_by: Optional[int] = None,
+        viewer_id: Optional[int] = None
     ) -> int:
         """Count total requisitions with optional filtering."""
         query = db.query(Requisition)
-        
+
         if project_id is not None:
             query = query.filter(Requisition.project_id == project_id)
-        
+
         if supplier_id is not None:
             query = query.filter(Requisition.supplier_id == supplier_id)
-        
-        if requested_by is not None:
-            query = query.filter(Requisition.requested_by == requested_by)
-        
+
+        if viewer_id is not None:
+            query = query.filter(
+                or_(Requisition.requested_by == viewer_id, Requisition.created_by == viewer_id)
+            )
+        else:
+            if requested_by is not None:
+                query = query.filter(Requisition.requested_by == requested_by)
+            if created_by is not None:
+                query = query.filter(Requisition.created_by == created_by)
+
         if status is not None:
             query = query.filter(Requisition.status == status)
-        
-        if created_by is not None:
-            query = query.filter(Requisition.created_by == created_by)
-        
+
         return query.count()
     
     def create(self, db: Session, requisition_in: RequisitionCreate, user_id: int, ip_address: Optional[str] = None) -> Requisition:
@@ -123,7 +198,30 @@ class CRUDRequisition:
                 detail=f"Requisition with number '{requisition_in.requisition_number}' already exists"
             )
         
+        # Validate supplier tax period has not expired
+        if requisition_in.supplier_id:
+            supplier = db.query(Supplier).filter(Supplier.id == requisition_in.supplier_id).first()
+            if supplier and supplier.tax_end_date and supplier.tax_end_date < date.today():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        f"The tax rates for supplier '{supplier.name}' expired on "
+                        f"{supplier.tax_end_date.isoformat()}. Update the supplier's tax period before creating a requisition."
+                    ),
+                )
+
         requisition_data = requisition_in.model_dump(exclude={"items", "documents", "retentions"})
+
+        if requisition_data.get("currency") == "USD":
+            from app.utils.banxico import fetch_usd_exchange_rate
+            try:
+                requisition_data["exchange_rate"] = fetch_usd_exchange_rate()
+            except RuntimeError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"No se pudo obtener el tipo de cambio de Banxico: {exc}",
+                )
+
         db_requisition = Requisition(
             **requisition_data,
             created_by=user_id,
@@ -345,6 +443,14 @@ class CRUDRequisition:
         )
         return True
     
+    def _net_amount(self, req) -> Decimal:
+        """Amount effectively committed/spent: total − isr_withheld − iva_withheld − retentions."""
+        total = Decimal(str(req.total_amount or 0))
+        isr   = Decimal(str(req.isr_withheld_amount or 0))
+        iva   = Decimal(str(req.iva_withheld_amount or 0))
+        ret   = sum(Decimal(str(r.retention_amount or 0)) for r in (req.retentions or []))
+        return total - isr - iva - ret
+
     def _update_project_budget(self, db: Session, project_id: int, commited_delta, spent_delta) -> None:
         """Adjust project commited/spent and recalculate available_balance."""
         project = db.query(Project).filter(Project.id == project_id).with_for_update().first()
@@ -370,7 +476,7 @@ class CRUDRequisition:
                 detail=f"Cannot submit requisition with status '{db_requisition.status}'"
             )
 
-        self._update_project_budget(db, db_requisition.project_id, db_requisition.total_amount, 0)
+        self._update_project_budget(db, db_requisition.project_id, self._net_amount(db_requisition), 0)
 
         db_requisition.status = "submitted"
         db_requisition.updated_by = user_id
@@ -422,7 +528,7 @@ class CRUDRequisition:
         prev_status = db_requisition.status
 
         if db_requisition.status == "submitted":
-            self._update_project_budget(db, db_requisition.project_id, -db_requisition.total_amount, 0)
+            self._update_project_budget(db, db_requisition.project_id, -self._net_amount(db_requisition), 0)
 
         db_requisition.status = "cancelled"
         db_requisition.updated_by = user_id
@@ -456,7 +562,7 @@ class CRUDRequisition:
                 detail=f"Cannot revert requisition with status '{db_requisition.status}' to draft"
             )
 
-        self._update_project_budget(db, db_requisition.project_id, -db_requisition.total_amount, 0)
+        self._update_project_budget(db, db_requisition.project_id, -self._net_amount(db_requisition), 0)
 
         db_requisition.status = "draft"
         db_requisition.updated_by = user_id
@@ -479,26 +585,24 @@ class CRUDRequisition:
                 detail=f"Cannot approve requisition with status '{db_requisition.status}'"
             )
 
-        # Validar que el proyecto tenga presupuesto suficiente
-        project = db.query(Project).filter(Project.id == db_requisition.project_id).first()
-        if not project:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Project with id {db_requisition.project_id} not found"
-            )
-
-        if project.available_balance < db_requisition.total_amount:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Insufficient budget. Available: {project.available_balance}, Required: {db_requisition.total_amount}"
-            )
+        net = self._net_amount(db_requisition)
 
         self._update_project_budget(
             db, db_requisition.project_id,
-            -db_requisition.total_amount,   # Libera el committed
-            db_requisition.total_amount     # Mueve a spent
+            -net,   # Libera el committed
+            net     # Mueve a spent
         )
         
+        if db_requisition.currency == "USD":
+            from app.utils.banxico import fetch_usd_exchange_rate
+            try:
+                db_requisition.exchange_rate = fetch_usd_exchange_rate()
+            except RuntimeError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"No se pudo obtener el tipo de cambio de Banxico: {exc}",
+                )
+
         db_requisition.status = "approved"
         db_requisition.approved_by = user_id
         db_requisition.approved_at = datetime.now()
@@ -561,7 +665,7 @@ class CRUDRequisition:
                 detail=f"Cannot reject requisition with status '{db_requisition.status}'"
             )
 
-        self._update_project_budget(db, db_requisition.project_id, -db_requisition.total_amount, 0)
+        self._update_project_budget(db, db_requisition.project_id, -self._net_amount(db_requisition), 0)
         
         db_requisition.status = "rejected"
         db_requisition.rejected_by = user_id
@@ -600,21 +704,77 @@ class CRUDRequisition:
 
         return db_requisition
     
-    def search(self, db: Session, search_term: str, skip: int = 0, limit: int = 100) -> List[Requisition]:
-        """Search requisitions by requisition number."""
-        return (
+    def search(
+        self,
+        db: Session,
+        search_term: str,
+        skip: int = 0,
+        limit: int = 100,
+        requested_by: Optional[int] = None,
+        viewer_id: Optional[int] = None,
+    ) -> List[Requisition]:
+        """Search requisitions by requisition number, supplier name, project name, or status."""
+        pattern = f"%{search_term}%"
+        query = (
             db.query(Requisition)
+            .join(Supplier, Requisition.supplier_id == Supplier.id, isouter=True)
+            .join(Project, Requisition.project_id == Project.id, isouter=True)
             .options(
                 joinedload(Requisition.supplier),
+                joinedload(Requisition.project),
                 joinedload(Requisition.creator),
             )
-            .filter(Requisition.requisition_number.ilike(f"%{search_term}%"))
+            .filter(
+                Requisition.requisition_number.ilike(pattern)
+                | Supplier.name.ilike(pattern)
+                | Project.name.ilike(pattern)
+                | Requisition.status.ilike(pattern)
+            )
+        )
+        if viewer_id is not None:
+            query = query.filter(
+                or_(Requisition.requested_by == viewer_id, Requisition.created_by == viewer_id)
+            )
+        elif requested_by is not None:
+            query = query.filter(Requisition.requested_by == requested_by)
+        return (
+            query
             .order_by(Requisition.created_at.desc())
             .offset(skip)
             .limit(limit)
             .all()
         )
 
+    def assign_purchase_order(
+        self,
+        db: Session,
+        requisition_id: int,
+        data: RequisitionAssignPurchaseOrder,
+        user_id: int,
+        ip_address: Optional[str] = None,
+    ) -> Optional[Requisition]:
+        db_requisition = self.get(db, requisition_id)
+        if not db_requisition:
+            return None
+
+        old_po = db_requisition.purchase_order
+        db_requisition.purchase_order = data.purchase_order
+        db_requisition.updated_by = user_id
+
+        AuditLogger.log_action(
+            db=db,
+            user_id=user_id,
+            action="UPDATE",
+            module="requisition",
+            description=f"Assigned purchase order to requisition {requisition_id}",
+            old_data={"purchase_order": old_po},
+            new_data={"purchase_order": data.purchase_order},
+            ip_address=ip_address,
+        )
+
+        db.commit()
+        db.refresh(db_requisition)
+        return db_requisition
 
 # Create a singleton instance
 requisition = CRUDRequisition()

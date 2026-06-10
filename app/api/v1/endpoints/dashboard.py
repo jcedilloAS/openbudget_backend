@@ -1,8 +1,10 @@
+from typing import Optional
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.dependencies import require_permission
+from app.core.dependencies import require_permission, user_has_any_permission
 from app.models.user import User
 from app.crud.dashboard import dashboard
 from app.schemas.dashboard import (
@@ -16,13 +18,20 @@ from app.schemas.dashboard import (
 router = APIRouter()
 
 
+def _scope_user_id(db: Session, current_user: User) -> Optional[int]:
+    """Returns None if the user can view everything; otherwise their user_id."""
+    if user_has_any_permission(db, current_user, "dashboard", ["view_all"]):
+        return None
+    return current_user.id
+
+
 @router.get("/", response_model=DashboardResponse, summary="Get full dashboard")
 def get_dashboard(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("projects", "list")),
 ):
     """Returns the complete dashboard: financial KPIs, project status, requisitions, and budget distribution."""
-    return dashboard.get_full_dashboard(db)
+    return dashboard.get_full_dashboard(db, user_id=_scope_user_id(db, current_user))
 
 
 @router.get("/financial-summary", response_model=FinancialSummary, summary="Financial KPIs")
@@ -31,7 +40,7 @@ def get_financial_summary(
     current_user: User = Depends(require_permission("projects", "list")),
 ):
     """Presupuesto total, comprometido, gastado, disponible, % ejecución y % compromiso."""
-    return dashboard.get_financial_summary(db)
+    return dashboard.get_financial_summary(db, user_id=_scope_user_id(db, current_user))
 
 
 @router.get("/projects", response_model=ProjectsDashboard, summary="Projects dashboard")
@@ -40,7 +49,7 @@ def get_projects_dashboard(
     current_user: User = Depends(require_permission("projects", "list")),
 ):
     """Estado de proyectos, top budget, top ejecución, sobre-compromisos, tendencia de creación."""
-    return dashboard.get_projects_dashboard(db)
+    return dashboard.get_projects_dashboard(db, user_id=_scope_user_id(db, current_user))
 
 
 @router.get("/requisitions", response_model=RequisitionsDashboard, summary="Requisitions dashboard")
@@ -49,7 +58,7 @@ def get_requisitions_dashboard(
     current_user: User = Depends(require_permission("requisitions", "list")),
 ):
     """Requisiciones por status, tiempo promedio aprobación, tasa, top solicitantes, aging."""
-    return dashboard.get_requisitions_dashboard(db)
+    return dashboard.get_requisitions_dashboard(db, user_id=_scope_user_id(db, current_user))
 
 
 @router.get("/budget-distribution", response_model=BudgetDistribution, summary="Budget distribution")
@@ -58,4 +67,4 @@ def get_budget_distribution(
     current_user: User = Depends(require_permission("projects", "list")),
 ):
     """Distribución presupuestal por proyecto, tendencia mensual, y forecast 3 meses."""
-    return dashboard.get_budget_distribution(db)
+    return dashboard.get_budget_distribution(db, user_id=_scope_user_id(db, current_user))

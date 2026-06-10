@@ -20,6 +20,8 @@ class Requisition(Base):
     iva_percentage = Column(Numeric(5, 2), nullable=False, default=0.00)
     iva_amount = Column(Numeric(15, 2), nullable=False, default=0.00)
     total_amount = Column(Numeric(15, 2), nullable=False, default=0.00)
+    isr_withheld_amount = Column(Numeric(15, 2), nullable=False, default=0.00)
+    iva_withheld_amount = Column(Numeric(15, 2), nullable=False, default=0.00)
     status = Column(String(50), nullable=False, default="pending")
     purchase_order = Column(String(100), nullable=True)
     approved_by = Column(Integer, ForeignKey("users.id"), nullable=True)

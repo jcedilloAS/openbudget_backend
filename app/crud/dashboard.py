@@ -2,11 +2,12 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, extract
 from decimal import Decimal
 from datetime import datetime, timedelta
-from typing import List
+from typing import List, Optional
 
 from app.models.project import Project
 from app.models.requisition import Requisition
 from app.models.user import User
+from app.models.user_project import UserProject
 from app.schemas.dashboard import (
     FinancialSummary,
     StatusCount, ProjectStatusSummary, ProjectRanked, OvercommittedProject, MonthCount,
@@ -20,15 +21,33 @@ from app.schemas.dashboard import (
 class CRUDDashboard:
 
     # ------------------------------------------------------------------ #
+    #  Scope helpers
+    # ------------------------------------------------------------------ #
+    def _project_filter(self, query, user_id: Optional[int]):
+        """Restrict the query to projects where the user is a member."""
+        if user_id is None:
+            return query
+        return query.join(UserProject, UserProject.project_id == Project.id).filter(
+            UserProject.user_id == user_id
+        )
+
+    def _requisition_filter(self, query, user_id: Optional[int]):
+        """Restrict the query to requisitions created by the user."""
+        if user_id is None:
+            return query
+        return query.filter(Requisition.created_by == user_id)
+
+    # ------------------------------------------------------------------ #
     #  1. Financial Summary
     # ------------------------------------------------------------------ #
-    def get_financial_summary(self, db: Session) -> FinancialSummary:
-        row = db.query(
+    def get_financial_summary(self, db: Session, user_id: Optional[int] = None) -> FinancialSummary:
+        base = db.query(
             func.coalesce(func.sum(Project.initial_budget), 0).label("budget"),
             func.coalesce(func.sum(Project.commited), 0).label("commited"),
             func.coalesce(func.sum(Project.spent), 0).label("spent"),
             func.coalesce(func.sum(Project.available_balance), 0).label("available"),
-        ).first()
+        )
+        row = self._project_filter(base, user_id).first()
 
         budget = Decimal(str(row.budget))
         commited = Decimal(str(row.commited))
@@ -50,10 +69,13 @@ class CRUDDashboard:
     # ------------------------------------------------------------------ #
     #  2. Projects Dashboard
     # ------------------------------------------------------------------ #
-    def get_projects_dashboard(self, db: Session) -> ProjectsDashboard:
+    def get_projects_dashboard(self, db: Session, user_id: Optional[int] = None) -> ProjectsDashboard:
         # --- by status ---
         rows = (
-            db.query(Project.status, func.count(Project.id))
+            self._project_filter(
+                db.query(Project.status, func.count(Project.id)),
+                user_id,
+            )
             .group_by(Project.status)
             .all()
         )
@@ -62,7 +84,7 @@ class CRUDDashboard:
 
         # --- top 5 budget ---
         top_budget_rows = (
-            db.query(Project)
+            self._project_filter(db.query(Project), user_id)
             .order_by(Project.initial_budget.desc())
             .limit(5)
             .all()
@@ -71,7 +93,7 @@ class CRUDDashboard:
 
         # --- top 5 execution % ---
         top_exec_rows = (
-            db.query(Project)
+            self._project_filter(db.query(Project), user_id)
             .filter(Project.initial_budget > 0)
             .order_by((Project.spent / Project.initial_budget).desc())
             .limit(5)
@@ -81,7 +103,7 @@ class CRUDDashboard:
 
         # --- overcommitted ---
         oc_rows = (
-            db.query(Project)
+            self._project_filter(db.query(Project), user_id)
             .filter((Project.commited + Project.spent) > Project.initial_budget)
             .all()
         )
@@ -101,10 +123,13 @@ class CRUDDashboard:
         # --- creation trend (last 12 months) ---
         twelve_months_ago = datetime.now() - timedelta(days=365)
         trend_rows = (
-            db.query(
-                extract("year", Project.created_at).label("year"),
-                extract("month", Project.created_at).label("month"),
-                func.count(Project.id).label("count"),
+            self._project_filter(
+                db.query(
+                    extract("year", Project.created_at).label("year"),
+                    extract("month", Project.created_at).label("month"),
+                    func.count(Project.id).label("count"),
+                ),
+                user_id,
             )
             .filter(Project.created_at >= twelve_months_ago)
             .group_by("year", "month")
@@ -124,13 +149,16 @@ class CRUDDashboard:
     # ------------------------------------------------------------------ #
     #  3. Requisitions Dashboard
     # ------------------------------------------------------------------ #
-    def get_requisitions_dashboard(self, db: Session) -> RequisitionsDashboard:
+    def get_requisitions_dashboard(self, db: Session, user_id: Optional[int] = None) -> RequisitionsDashboard:
         # --- by status with amounts ---
         rows = (
-            db.query(
-                Requisition.status,
-                func.count(Requisition.id),
-                func.coalesce(func.sum(Requisition.total_amount), 0),
+            self._requisition_filter(
+                db.query(
+                    Requisition.status,
+                    func.count(Requisition.id),
+                    func.coalesce(func.sum(Requisition.total_amount), 0),
+                ),
+                user_id,
             )
             .group_by(Requisition.status)
             .all()
@@ -142,10 +170,13 @@ class CRUDDashboard:
 
         # --- avg approval time (hours) ---
         avg_row = (
-            db.query(
-                func.avg(
-                    extract("epoch", Requisition.approved_at) - extract("epoch", Requisition.created_at)
-                )
+            self._requisition_filter(
+                db.query(
+                    func.avg(
+                        extract("epoch", Requisition.approved_at) - extract("epoch", Requisition.created_at)
+                    )
+                ),
+                user_id,
             )
             .filter(Requisition.status == "approved", Requisition.approved_at.isnot(None))
             .scalar()
@@ -158,12 +189,12 @@ class CRUDDashboard:
 
         # --- approval rate ---
         processed = (
-            db.query(func.count(Requisition.id))
+            self._requisition_filter(db.query(func.count(Requisition.id)), user_id)
             .filter(Requisition.status.in_(["approved", "rejected"]))
             .scalar()
         )
         approved_count = (
-            db.query(func.count(Requisition.id))
+            self._requisition_filter(db.query(func.count(Requisition.id)), user_id)
             .filter(Requisition.status == "approved")
             .scalar()
         )
@@ -175,11 +206,14 @@ class CRUDDashboard:
 
         # --- top 5 requesters ---
         req_rows = (
-            db.query(
-                Requisition.created_by,
-                User.username,
-                User.name,
-                func.count(Requisition.id).label("cnt"),
+            self._requisition_filter(
+                db.query(
+                    Requisition.created_by,
+                    User.username,
+                    User.name,
+                    func.count(Requisition.id).label("cnt"),
+                ),
+                user_id,
             )
             .join(User, User.id == Requisition.created_by)
             .group_by(Requisition.created_by, User.username, User.name)
@@ -195,17 +229,17 @@ class CRUDDashboard:
         # --- aging buckets (submitted requisitions) ---
         now = datetime.now()
         over_3 = (
-            db.query(func.count(Requisition.id))
+            self._requisition_filter(db.query(func.count(Requisition.id)), user_id)
             .filter(Requisition.status == "submitted", Requisition.created_at <= now - timedelta(days=3))
             .scalar()
         )
         over_7 = (
-            db.query(func.count(Requisition.id))
+            self._requisition_filter(db.query(func.count(Requisition.id)), user_id)
             .filter(Requisition.status == "submitted", Requisition.created_at <= now - timedelta(days=7))
             .scalar()
         )
         over_15 = (
-            db.query(func.count(Requisition.id))
+            self._requisition_filter(db.query(func.count(Requisition.id)), user_id)
             .filter(Requisition.status == "submitted", Requisition.created_at <= now - timedelta(days=15))
             .scalar()
         )
@@ -221,9 +255,13 @@ class CRUDDashboard:
     # ------------------------------------------------------------------ #
     #  4. Budget Distribution
     # ------------------------------------------------------------------ #
-    def get_budget_distribution(self, db: Session) -> BudgetDistribution:
+    def get_budget_distribution(self, db: Session, user_id: Optional[int] = None) -> BudgetDistribution:
         # --- bar chart: committed vs spent vs available per project ---
-        projects = db.query(Project).order_by(Project.initial_budget.desc()).all()
+        projects = (
+            self._project_filter(db.query(Project), user_id)
+            .order_by(Project.initial_budget.desc())
+            .all()
+        )
         by_project = [
             ProjectBudgetBar(
                 id=p.id,
@@ -239,10 +277,13 @@ class CRUDDashboard:
         # --- monthly spend trend (last 12 months from approved requisitions) ---
         twelve_months_ago = datetime.now() - timedelta(days=365)
         trend_rows = (
-            db.query(
-                extract("year", Requisition.approved_at).label("year"),
-                extract("month", Requisition.approved_at).label("month"),
-                func.coalesce(func.sum(Requisition.total_amount), 0).label("total"),
+            self._requisition_filter(
+                db.query(
+                    extract("year", Requisition.approved_at).label("year"),
+                    extract("month", Requisition.approved_at).label("month"),
+                    func.coalesce(func.sum(Requisition.total_amount), 0).label("total"),
+                ),
+                user_id,
             )
             .filter(
                 Requisition.status == "approved",
@@ -259,7 +300,7 @@ class CRUDDashboard:
         ]
 
         # --- forecast: linear projection for next 3 months ---
-        forecast = self._compute_forecast(db, monthly_trend)
+        forecast = self._compute_forecast(db, monthly_trend, user_id)
 
         return BudgetDistribution(
             by_project=by_project,
@@ -270,12 +311,12 @@ class CRUDDashboard:
     # ------------------------------------------------------------------ #
     #  Full dashboard
     # ------------------------------------------------------------------ #
-    def get_full_dashboard(self, db: Session) -> DashboardResponse:
+    def get_full_dashboard(self, db: Session, user_id: Optional[int] = None) -> DashboardResponse:
         return DashboardResponse(
-            financial_summary=self.get_financial_summary(db),
-            projects=self.get_projects_dashboard(db),
-            requisitions=self.get_requisitions_dashboard(db),
-            budget_distribution=self.get_budget_distribution(db),
+            financial_summary=self.get_financial_summary(db, user_id=user_id),
+            projects=self.get_projects_dashboard(db, user_id=user_id),
+            requisitions=self.get_requisitions_dashboard(db, user_id=user_id),
+            budget_distribution=self.get_budget_distribution(db, user_id=user_id),
         )
 
     # ------------------------------------------------------------------ #
@@ -298,7 +339,12 @@ class CRUDDashboard:
             status=p.status,
         )
 
-    def _compute_forecast(self, db: Session, monthly_trend: List[MonthlySpend]) -> List[BudgetForecastPoint]:
+    def _compute_forecast(
+        self,
+        db: Session,
+        monthly_trend: List[MonthlySpend],
+        user_id: Optional[int] = None,
+    ) -> List[BudgetForecastPoint]:
         if len(monthly_trend) < 2:
             return []
 
@@ -314,9 +360,10 @@ class CRUDDashboard:
         slope = numerator / denominator if denominator else 0
         intercept = y_mean - slope * x_mean
 
-        # Total available budget
-        total_available_row = db.query(
-            func.coalesce(func.sum(Project.available_balance), 0)
+        # Total available budget (scoped to user's projects when applicable)
+        total_available_row = self._project_filter(
+            db.query(func.coalesce(func.sum(Project.available_balance), 0)),
+            user_id,
         ).scalar()
         remaining = Decimal(str(total_available_row))
 

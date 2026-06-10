@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Numeric, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Numeric, Boolean, Date, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database import Base
@@ -19,7 +19,15 @@ class Supplier(Base):
     city = Column(String(100), nullable=True)
     state = Column(String(100), nullable=True)
     country = Column(String(100), nullable=True)
+    origin = Column(String(20), nullable=True)
     percentage_iva = Column(Numeric(5, 2), nullable=True)
+    isr_withheld_professional_fees = Column(Numeric(5, 2), nullable=True)
+    isr_withheld_resico = Column(Numeric(5, 2), nullable=True)
+    iva_withheld_professional_fees = Column(Numeric(5, 2), nullable=True)
+    iva_withheld_resico = Column(Numeric(5, 2), nullable=True)
+    iva_withheld_freight = Column(Numeric(5, 2), nullable=True)
+    tax_start_date = Column(Date, nullable=True)
+    tax_end_date = Column(Date, nullable=True)
     delivery_time_days = Column(Integer, nullable=True)
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     is_active = Column(Boolean, nullable=False, default=True)
@@ -34,6 +42,7 @@ class Supplier(Base):
     updater = relationship("User", foreign_keys=[updated_by], backref="updated_suppliers")
     documents = relationship("SupplierDocument", back_populates="supplier", cascade="all, delete-orphan")
     supplier_retentions = relationship("SupplierRetention", back_populates="supplier", cascade="all, delete-orphan")
+    contacts = relationship("SupplierContact", back_populates="supplier", cascade="all, delete-orphan")
     
     def __repr__(self):
         return f"<Supplier(id={self.id}, supplier_code='{self.supplier_code}', name='{self.name}')>"

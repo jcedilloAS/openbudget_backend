@@ -325,3 +325,28 @@ def require_permission(catalog_code: str, action_code: str):
         return current_user
 
     return permission_checker
+
+
+def user_has_any_permission(
+    db: Session, user: User, catalog_code: str, action_codes: List[str]
+) -> bool:
+    """Return True if the user (or superuser) has any of the given actions on a catalog."""
+    if user.is_superuser:
+        return True
+    return (
+        db.query(RolePermission.id)
+        .join(CatalogAction, RolePermission.catalog_action_id == CatalogAction.id)
+        .join(Catalog, CatalogAction.catalog_id == Catalog.id)
+        .join(Action, CatalogAction.action_id == Action.id)
+        .filter(
+            and_(
+                RolePermission.role_id == user.role_id,
+                Catalog.catalog_code == catalog_code,
+                Action.action_code.in_(action_codes),
+                RolePermission.is_allowed == True,
+                CatalogAction.is_active == True,
+            )
+        )
+        .first()
+        is not None
+    )

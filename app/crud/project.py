@@ -3,7 +3,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func
 from typing import List, Optional
 from fastapi import HTTPException, status
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from app.models.project import Project
 from app.models.user import User
@@ -455,14 +455,14 @@ class CRUDProject:
         current_user_id: int,
         ip_address: Optional[str] = None
     ) -> ProjectBulkUploadResult:
-        """Bulk create projects from a list of rows. Col 0 = project_code, Col 1 = name."""
+        """Bulk create projects from a list of rows. Col 0 = project_code, Col 1 = name, Col 2 = initial_budget."""
         created, failed = 0, 0
         errors: List[ProjectBulkUploadError] = []
 
         for row_idx, row in enumerate(rows, start=2):  # start=2: row 1 is header
             project_code = str(row[0] or "").strip() if len(row) > 0 else ""
             name = str(row[1] or "").strip() if len(row) > 1 else ""
-            print(f'project_code: {project_code} name: {name} ')
+            budget_raw = row[2] if len(row) > 2 else None
             if not project_code or not name:
                 failed += 1
                 errors.append(ProjectBulkUploadError(
@@ -472,8 +472,29 @@ class CRUDProject:
                 ))
                 continue
 
+            # Parse initial_budget (also used as available_balance in create); empty cell defaults to 0.00
             try:
-                project_in = ProjectCreate(project_code=project_code, name=name)
+                if budget_raw is None or str(budget_raw).strip() == "":
+                    initial_budget = Decimal("0.00")
+                else:
+                    initial_budget = Decimal(str(budget_raw).strip())
+                if initial_budget < 0:
+                    raise ValueError("initial_budget must be greater than or equal to 0")
+            except (InvalidOperation, ValueError):
+                failed += 1
+                errors.append(ProjectBulkUploadError(
+                    row=row_idx,
+                    project_code=project_code,
+                    error=f"Invalid initial_budget value: '{budget_raw}'"
+                ))
+                continue
+
+            try:
+                project_in = ProjectCreate(
+                    project_code=project_code,
+                    name=name,
+                    initial_budget=initial_budget,
+                )
                 self.create(db, project_in=project_in, current_user_id=current_user_id, ip_address=ip_address)
                 created += 1
             except HTTPException as e:

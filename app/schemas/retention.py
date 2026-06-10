@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 from decimal import Decimal
 
 
@@ -9,6 +9,7 @@ class RetentionBase(BaseModel):
     code: str = Field(..., min_length=1, max_length=50, description="Unique retention code")
     description: Optional[str] = Field(None, max_length=255, description="Retention description")
     percentage: Decimal = Field(..., ge=0, le=100, description="Retention percentage (0-100)")
+    applies_to: Literal['subtotal', 'iva'] = Field(default="subtotal", description="Base to apply retention to: 'subtotal' or 'iva'")
     is_active: bool = Field(default=True, description="Whether the retention is active")
     due_date: Optional[datetime] = Field(None, description="Due date for the retention")
 
@@ -23,6 +24,7 @@ class RetentionUpdate(BaseModel):
     code: Optional[str] = Field(None, min_length=1, max_length=50, description="Unique retention code")
     description: Optional[str] = Field(None, max_length=255, description="Retention description")
     percentage: Optional[Decimal] = Field(None, ge=0, le=100, description="Retention percentage (0-100)")
+    applies_to: Optional[Literal['subtotal', 'iva']] = Field(None, description="Base to apply retention to: 'subtotal' or 'iva'")
     is_active: Optional[bool] = Field(None, description="Whether the retention is active")
     due_date: Optional[datetime] = Field(None, description="Due date for the retention")
 

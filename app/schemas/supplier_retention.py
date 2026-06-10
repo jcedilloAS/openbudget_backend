@@ -10,6 +10,7 @@ class RetentionNested(BaseModel):
     code: str
     description: Optional[str] = None
     percentage: Decimal
+    applies_to: str = "subtotal"
     is_active: bool
     due_date: Optional[datetime] = None
 

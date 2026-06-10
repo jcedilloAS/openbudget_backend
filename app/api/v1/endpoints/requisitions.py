@@ -1,4 +1,5 @@
 import json
+from datetime import date
 from io import BytesIO
 from typing import List, Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, status, Query, UploadFile
@@ -6,12 +7,13 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.database import get_db
-from app.core.dependencies import require_permission
+from app.core.dependencies import require_permission, user_has_any_permission
 from app.core.config import settings
 from app.models.user import User
 from app.crud.requisition import requisition
 from app.utils.request import get_client_ip
 from app.utils.file_storage import save_uploaded_file
+from app.utils.report_generator import generate_requisitions_report, generate_requisitions_export, generate_requisitions_list_excel
 from app.schemas.requisition import (
     Requisition,
     RequisitionCreate,
@@ -19,11 +21,108 @@ from app.schemas.requisition import (
     RequisitionList,
     RequisitionApprove,
     RequisitionReject,
+    RequisitionAssignPurchaseOrder,
     RequisitionWithDetails,
     RequisitionWithDocuments
 )
 
 router = APIRouter()
+
+
+@router.get("/report", summary="Download requisitions report as Excel")
+def download_requisitions_report(
+    date_from: Optional[date] = Query(None, description="Filter from date (YYYY-MM-DD)"),
+    date_to: Optional[date] = Query(None, description="Filter to date (YYYY-MM-DD)"),
+    supplier_id: Optional[List[int]] = Query(None, description="Filter by supplier IDs"),
+    project_id: Optional[List[int]] = Query(None, description="Filter by project IDs"),
+    status: Optional[str] = Query(None, description="Filter by status"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("reports", "view")),
+):
+    rows = requisition.get_for_report(
+        db,
+        date_from=date_from,
+        date_to=date_to,
+        supplier_id=supplier_id,
+        project_id=project_id,
+        status=status,
+    )
+    output = generate_requisitions_report(rows, date_from=date_from, date_to=date_to)
+    filename = f"requisiciones_{date.today().strftime('%Y%m%d')}.xlsx"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=headers,
+    )
+
+
+@router.get("/export", summary="Export requisitions as Excel")
+def export_requisitions(
+    project_id: Optional[List[int]] = Query(None, description="Filter by project IDs"),
+    supplier_id: Optional[List[int]] = Query(None, description="Filter by supplier IDs"),
+    status: Optional[str] = Query(None, description="Filter by status"),
+    created_by: Optional[int] = Query(None, description="Filter by creator user ID"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("reports", "view")),
+):
+    rows = requisition.get_for_export(
+        db,
+        project_id=project_id,
+        supplier_id=supplier_id,
+        status=status,
+        created_by=created_by,
+    )
+    output = generate_requisitions_export(rows)
+    filename = f"requisiciones_export_{date.today().strftime('%Y%m%d')}.xlsx"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=headers,
+    )
+
+
+@router.get("/excel", summary="Export requisitions list as Excel")
+def export_requisitions_list_excel(
+    project_id: Optional[int] = Query(None, description="Filter by project ID"),
+    supplier_id: Optional[int] = Query(None, description="Filter by supplier ID"),
+    requested_by: Optional[int] = Query(None, description="Filter by requester user ID"),
+    status: Optional[str] = Query(None, description="Filter by status"),
+    created_by: Optional[int] = Query(None, description="Filter by creator user ID"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("requisitions", "list")),
+):
+    """
+    Download the requisitions list as an Excel file (.xlsx).
+    Applies the same filters and permission restrictions as the GET / endpoint.
+    """
+    viewer_id = None
+    if not user_has_any_permission(db, current_user, "requisitions", ["approve", "reject"]):
+        viewer_id = current_user.id
+        requested_by = None
+        created_by = None
+
+    rows = requisition.get_multi(
+        db,
+        skip=0,
+        limit=10000,
+        project_id=project_id,
+        supplier_id=supplier_id,
+        requested_by=requested_by,
+        status=status,
+        created_by=created_by,
+        viewer_id=viewer_id,
+    )
+
+    output = generate_requisitions_list_excel(rows)
+    filename = f"requisiciones_{date.today().strftime('%Y%m%d')}.xlsx"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=headers,
+    )
 
 
 @router.get("/", response_model=RequisitionList, summary="List all requisitions")
@@ -49,15 +148,23 @@ def list_requisitions(
     - **status**: Optional filter by status
     - **created_by**: Optional filter by creator user ID
     """
+    # Users without approve/reject can only see their own requisitions (created or requested)
+    viewer_id = None
+    if not user_has_any_permission(db, current_user, "requisitions", ["approve", "reject"]):
+        viewer_id = current_user.id
+        requested_by = None
+        created_by = None
+
     requisitions = requisition.get_multi(
-        db, 
-        skip=skip, 
-        limit=limit, 
+        db,
+        skip=skip,
+        limit=limit,
         project_id=project_id,
         supplier_id=supplier_id,
         requested_by=requested_by,
         status=status,
-        created_by=created_by
+        created_by=created_by,
+        viewer_id=viewer_id
     )
     total = requisition.count(
         db,
@@ -65,9 +172,10 @@ def list_requisitions(
         supplier_id=supplier_id,
         requested_by=requested_by,
         status=status,
-        created_by=created_by
+        created_by=created_by,
+        viewer_id=viewer_id
     )
-    
+
     return RequisitionList(total=total, items=requisitions)
 
 
@@ -76,17 +184,26 @@ def search_requisitions(
     q: str = Query(..., min_length=1, description="Search term (requisition number)"),
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
+    requested_by: Optional[int] = Query(None, description="Filter by requester user ID"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("requisitions", "list"))
 ):
     """
     Search requisitions by requisition number.
-    
+
     - **q**: Search term
     - **skip**: Number of records to skip
     - **limit**: Maximum number of records to return
+    - **requested_by**: Optional filter by requester user ID
     """
-    requisitions = requisition.search(db, search_term=q, skip=skip, limit=limit)
+    viewer_id = None
+    if not user_has_any_permission(db, current_user, "requisitions", ["approve", "reject"]):
+        viewer_id = current_user.id
+        requested_by = None
+
+    requisitions = requisition.search(
+        db, search_term=q, skip=skip, limit=limit, requested_by=requested_by, viewer_id=viewer_id
+    )
     return RequisitionList(total=len(requisitions), items=requisitions)
 
 
@@ -129,6 +246,17 @@ def get_requisition_pdf(
             detail=f"Requisition with id {requisition_id} not found"
         )
 
+    # Users without approve/reject can only access their own requisitions
+    if not user_has_any_permission(db, current_user, "requisitions", ["approve", "reject"]):
+        if (
+            db_requisition.requested_by != current_user.id
+            and db_requisition.created_by != current_user.id
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Requisition with id {requisition_id} not found"
+            )
+
     sys_config = sys_config_crud.get_active(db)
     pdf_bytes = generate_requisition_pdf(db_requisition, sys_config)
     filename = f"requisicion-{db_requisition.requisition_number}.pdf"
@@ -152,13 +280,24 @@ def get_requisition(
     - **requisition_id**: The ID of the requisition to retrieve
     """
     db_requisition = requisition.get(db, requisition_id=requisition_id)
-    
+
     if not db_requisition:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Requisition with id {requisition_id} not found"
         )
-    
+
+    # Users without approve/reject can only access their own requisitions
+    if not user_has_any_permission(db, current_user, "requisitions", ["approve", "reject"]):
+        if (
+            db_requisition.requested_by != current_user.id
+            and db_requisition.created_by != current_user.id
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Requisition with id {requisition_id} not found"
+            )
+
     return db_requisition
 
 
@@ -174,13 +313,24 @@ def get_requisition_by_number(
     - **requisition_number**: The unique number of the requisition to retrieve
     """
     db_requisition = requisition.get_by_requisition_number(db, requisition_number=requisition_number)
-    
+
     if not db_requisition:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Requisition with number '{requisition_number}' not found"
         )
-    
+
+    # Users without approve/reject can only access their own requisitions
+    if not user_has_any_permission(db, current_user, "requisitions", ["approve", "reject"]):
+        if (
+            db_requisition.requested_by != current_user.id
+            and db_requisition.created_by != current_user.id
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Requisition with number '{requisition_number}' not found"
+            )
+
     return db_requisition
 
 
@@ -478,6 +628,31 @@ def revert_requisition_to_draft(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Requisition with id {requisition_id} not found"
+        )
+
+    return db_requisition
+
+
+@router.patch("/{requisition_id}/purchase-order", response_model=RequisitionWithDetails, summary="Assign purchase order to a requisition")
+def assign_purchase_order(
+    requisition_id: int,
+    data: RequisitionAssignPurchaseOrder,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("requisitions", "update")),
+):
+    db_requisition = requisition.assign_purchase_order(
+        db,
+        requisition_id=requisition_id,
+        data=data,
+        user_id=current_user.id,
+        ip_address=get_client_ip(request),
+    )
+
+    if not db_requisition:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Requisition with id {requisition_id} not found",
         )
 
     return db_requisition

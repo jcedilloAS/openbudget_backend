@@ -51,6 +51,12 @@ def _fmt_currency(value, currency: str = "MXN") -> str:
         return str(value)
 
 
+def _to_mxn(value, rate: Decimal) -> Decimal:
+    if value is None:
+        return Decimal("0")
+    return Decimal(str(value)) * rate
+
+
 def _fmt_date(dt) -> str:
     if dt is None:
         return "—"
@@ -132,14 +138,17 @@ def generate_requisition_pdf(req, sys_config: Optional[object] = None) -> bytes:
         if logo_flowable:
             logo_cell.append(logo_flowable)
 
-    header_data = [[
-        logo_cell,
-        [
-            Paragraph("<b>REQUISICIÓN</b>", info_right_style),
-            Paragraph(f"No. <b>{_safe(req.requisition_number)}</b>", info_right_style),
-            Paragraph(f"Fecha: <b>{_fmt_date(req.created_at)}</b>", info_right_style),
-        ],
-    ]]
+    header_right = [
+        Paragraph("<b>REQUISICIÓN</b>", info_right_style),
+        Paragraph(f"No. <b>{_safe(req.requisition_number)}</b>", info_right_style),
+        Paragraph(f"Fecha: <b>{_fmt_date(req.created_at)}</b>", info_right_style),
+    ]
+    if req.purchase_order:
+        header_right.append(
+            Paragraph(f"O.C.: <b>{req.purchase_order}</b>", info_right_style)
+        )
+
+    header_data = [[logo_cell, header_right]]
 
     header_table = Table(header_data, colWidths=["55%", "45%"])
     header_table.setStyle(TableStyle([
@@ -221,7 +230,11 @@ def generate_requisition_pdf(req, sys_config: Optional[object] = None) -> bytes:
     requester_email = _safe(requester.email if requester else None)
 
     currency = _safe(req.currency, "MXN")
-    exchange_rate = _safe(req.exchange_rate, "1.0000")
+    rate = Decimal(str(req.exchange_rate)) if req.exchange_rate else Decimal("1")
+    # Only convert when there is a meaningful exchange rate (USD reqs without Banxico rate keep their currency)
+    convert_to_mxn = currency == "MXN" or rate > Decimal("1")
+    display_currency = "MXN" if convert_to_mxn else currency
+    exchange_rate_label = f"{currency}  (T/C: {_safe(req.exchange_rate, '1.0000')})"
 
     info_data = [[
         # Column 1 — project
@@ -242,7 +255,7 @@ def generate_requisition_pdf(req, sys_config: Optional[object] = None) -> bytes:
             Paragraph("SOLICITANTE", section_header_style),
             *info_cell("Nombre", requester_name),
             *info_cell("Email", requester_email),
-            *info_cell("Moneda", f"{currency}  (T/C: {exchange_rate})"),
+            *info_cell("Moneda", exchange_rate_label),
         ],
     ]]
 
@@ -316,8 +329,8 @@ def generate_requisition_pdf(req, sys_config: Optional[object] = None) -> bytes:
             Paragraph(desc_text, cell_left_style),
             Paragraph(qty, cell_center_style),
             Paragraph(_safe(item.unit), cell_center_style),
-            Paragraph(_fmt_currency(item.unit_price, ""), cell_right_style),
-            Paragraph(_fmt_currency(item.total_amount, ""), cell_right_style),
+            Paragraph(_fmt_currency(_to_mxn(item.unit_price, rate) if convert_to_mxn else item.unit_price, ""), cell_right_style),
+            Paragraph(_fmt_currency(_to_mxn(item.total_amount, rate) if convert_to_mxn else item.total_amount, ""), cell_right_style),
         ]
         items_rows.append(row)
 
@@ -384,41 +397,93 @@ def generate_requisition_pdf(req, sys_config: Optional[object] = None) -> bytes:
 
     iva_pct = _safe(req.iva_percentage, "0")
 
+    def _amt(value):
+        return _to_mxn(value, rate) if convert_to_mxn else value
+
     totals_data = [
-        [Paragraph("Subtotal", label_style),       Paragraph(_fmt_currency(req.subtotal, currency), value_style)],
-        [Paragraph(f"IVA ({iva_pct}%)", label_style), Paragraph(_fmt_currency(req.iva_amount, currency), value_style)],
+        [Paragraph(f"Subtotal {display_currency}", label_style), Paragraph(_fmt_currency(_amt(req.subtotal), display_currency), value_style)],
+        [Paragraph(f"IVA ({iva_pct}%)", label_style),            Paragraph(_fmt_currency(_amt(req.iva_amount), display_currency), value_style)],
     ]
 
     for req_ret in (req.retentions or []):
         ret = req_ret.retention
         if ret is None:
             continue
-        ret_label = f"Retención ({ret.code} – {_safe(ret.percentage)}%)"
+        base_label = "IVA" if getattr(ret, "applies_to", "subtotal") == "iva" else "Subtotal"
+        ret_label = f"Retención ({ret.code} – {_safe(ret.percentage)}% sobre {base_label})"
         if ret.description:
             ret_label += f" {ret.description}"
         if req_ret.retention_amount and Decimal(str(req_ret.retention_amount)) != 0:
             totals_data.append([
                 Paragraph(ret_label, label_style),
-                Paragraph(f"- {_fmt_currency(req_ret.retention_amount, currency)}", value_style),
+                Paragraph(f"- {_fmt_currency(_amt(req_ret.retention_amount), display_currency)}", value_style),
             ])
 
     totals_data.append([
-        Paragraph("TOTAL", grand_label_style),
-        Paragraph(_fmt_currency(req.total_amount, currency), grand_value_style),
+        Paragraph(f"TOTAL {display_currency}", grand_label_style),
+        Paragraph(_fmt_currency(_amt(req.total_amount), display_currency), grand_value_style),
     ])
+    total_row = len(totals_data) - 1
+
+    # Withholding rows — only shown when amounts are present and > 0
+    isr_amount = Decimal(str(req.isr_withheld_amount or 0))
+    iva_wh_amount = Decimal(str(req.iva_withheld_amount or 0))
+    ret_total = sum(Decimal(str(r.retention_amount or 0)) for r in (req.retentions or []))
+    net_amount = _amt(req.total_amount) - _amt(isr_amount) - _amt(iva_wh_amount) - _amt(ret_total)
+    has_withholdings = isr_amount > 0 or iva_wh_amount > 0
+
+    withholding_label_style = ParagraphStyle(
+        "WithholdingLabel", parent=styles["Normal"], fontSize=9,
+        textColor=colors.HexColor("#b45309"), alignment=TA_RIGHT,
+    )
+    withholding_value_style = ParagraphStyle(
+        "WithholdingValue", parent=styles["Normal"], fontSize=9,
+        fontName="Helvetica-Bold", textColor=colors.HexColor("#b45309"), alignment=TA_RIGHT,
+    )
+    net_label_style = ParagraphStyle(
+        "NetLabel", parent=styles["Normal"], fontSize=11,
+        fontName="Helvetica-Bold", textColor=HEADER_TEXT, alignment=TA_RIGHT,
+    )
+    net_value_style = ParagraphStyle(
+        "NetValue", parent=styles["Normal"], fontSize=11,
+        fontName="Helvetica-Bold", textColor=HEADER_TEXT, alignment=TA_RIGHT,
+    )
+
+    if has_withholdings:
+        if isr_amount > 0:
+            totals_data.append([
+                Paragraph("ISR Retenido", withholding_label_style),
+                Paragraph(f"- {_fmt_currency(_amt(isr_amount), display_currency)}", withholding_value_style),
+            ])
+        if iva_wh_amount > 0:
+            totals_data.append([
+                Paragraph("IVA Retenido", withholding_label_style),
+                Paragraph(f"- {_fmt_currency(_amt(iva_wh_amount), display_currency)}", withholding_value_style),
+            ])
+        totals_data.append([
+            Paragraph(f"NETO A PAGAR {display_currency}", net_label_style),
+            Paragraph(_fmt_currency(_amt(net_amount), display_currency), net_value_style),
+        ])
 
     totals_table = Table(totals_data, colWidths=[None, 5 * cm], hAlign="RIGHT")
     last_row = len(totals_data) - 1
-    totals_table.setStyle(TableStyle([
+    style_cmds = [
         ("TOPPADDING", (0, 0), (-1, -1), 4),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
         ("LEFTPADDING", (0, 0), (-1, -1), 8),
         ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-        ("LINEABOVE", (0, last_row), (-1, last_row), 1, PRIMARY),
-        ("BACKGROUND", (0, last_row), (-1, last_row), PRIMARY),
-        ("ROWBACKGROUNDS", (0, 0), (-1, last_row - 1), [colors.white, ALT_ROW]),
-        ("GRID", (0, 0), (-1, last_row - 1), 0.25, colors.HexColor("#e2e8f0")),
-    ]))
+        ("LINEABOVE", (0, total_row), (-1, total_row), 1, PRIMARY),
+        ("BACKGROUND", (0, total_row), (-1, total_row), PRIMARY),
+        ("ROWBACKGROUNDS", (0, 0), (-1, total_row - 1), [colors.white, ALT_ROW]),
+        ("GRID", (0, 0), (-1, total_row - 1), 0.25, colors.HexColor("#e2e8f0")),
+    ]
+    if has_withholdings:
+        style_cmds += [
+            ("BACKGROUND", (0, last_row), (-1, last_row), colors.HexColor("#1e3a5f")),
+            ("LINEABOVE", (0, last_row), (-1, last_row), 1, colors.HexColor("#2563eb")),
+            ("BACKGROUND", (0, total_row + 1), (-1, last_row - 1), colors.HexColor("#fffbeb")),
+        ]
+    totals_table.setStyle(TableStyle(style_cmds))
     story.append(totals_table)
 
     # ── 6. Authorization info ─────────────────────────────────────────────

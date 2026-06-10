@@ -20,6 +20,8 @@ class RequisitionBase(BaseModel):
     iva_percentage: Decimal = Field(default=Decimal("0.00"), ge=0, le=100, description="IVA percentage")
     iva_amount: Decimal = Field(default=Decimal("0.00"), ge=0, description="IVA amount")
     total_amount: Decimal = Field(default=Decimal("0.00"), ge=0, description="Total amount")
+    isr_withheld_amount: Decimal = Field(default=Decimal("0.00"), ge=0, description="ISR withheld amount (snapshot from supplier)")
+    iva_withheld_amount: Decimal = Field(default=Decimal("0.00"), ge=0, description="IVA withheld amount (snapshot from supplier)")
     status: str = Field(default="draft", max_length=50, description="Status (draft, submitted, approved, rejected, cancelled)")
     purchase_order: Optional[str] = Field(None, max_length=100, description="Purchase order number")
 
@@ -55,6 +57,8 @@ class RequisitionUpdate(BaseModel):
     iva_percentage: Optional[Decimal] = Field(None, ge=0, le=100, description="IVA percentage")
     iva_amount: Optional[Decimal] = Field(None, ge=0, description="IVA amount")
     total_amount: Optional[Decimal] = Field(None, ge=0, description="Total amount")
+    isr_withheld_amount: Optional[Decimal] = Field(None, ge=0, description="ISR withheld amount")
+    iva_withheld_amount: Optional[Decimal] = Field(None, ge=0, description="IVA withheld amount")
     status: Optional[str] = Field(None, max_length=50, description="Status (pending, approved, rejected)")
     purchase_order: Optional[str] = Field(None, max_length=100, description="Purchase order number")
     items: Optional[List[RequisitionItemInline]] = Field(None, description="List of requisition items")
@@ -76,6 +80,11 @@ class RequisitionReject(BaseModel):
     rejection_reason: str = Field(..., min_length=1, max_length=500, description="Reason for rejection")
 
 
+class RequisitionAssignPurchaseOrder(BaseModel):
+    """Schema for assigning a purchase order number to a requisition."""
+    purchase_order: str = Field(..., min_length=1, max_length=100, description="Purchase order number")
+
+
 class Requisition(RequisitionBase):
     """Schema for Requisition response."""
     id: int = Field(..., description="Requisition ID")
@@ -89,6 +98,7 @@ class Requisition(RequisitionBase):
     updated_at: datetime = Field(..., description="Last update timestamp")
     updated_by: int = Field(..., description="User ID who last updated")
     supplier_name: Optional[str] = Field(None, description="Supplier name")
+    project_name: Optional[str] = Field(None, description="Project name")
     created_by_name: Optional[str] = Field(None, description="Name of the user who created the requisition")
 
     @model_validator(mode='before')
@@ -96,8 +106,10 @@ class Requisition(RequisitionBase):
     def populate_related_names(cls, data):
         if not isinstance(data, dict):
             supplier = getattr(data, 'supplier', None)
+            project = getattr(data, 'project', None)
             creator = getattr(data, 'creator', None)
             data.__dict__['supplier_name'] = supplier.name if supplier else None
+            data.__dict__['project_name'] = project.name if project else None
             data.__dict__['created_by_name'] = creator.name if creator else None
         return data
 

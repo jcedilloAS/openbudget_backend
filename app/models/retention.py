@@ -13,6 +13,7 @@ class Retention(Base):
     code = Column(String(50), unique=True, index=True, nullable=False)
     description = Column(String(255), nullable=True)
     percentage = Column(Numeric(5, 2), nullable=False)
+    applies_to = Column(String(20), nullable=False, default="subtotal")
     is_active = Column(Boolean, nullable=False, default=True)
     due_date = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

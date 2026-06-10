@@ -7,6 +7,7 @@ from app.models.user_project import UserProject
 from app.models.supplier import Supplier
 from app.models.supplier_document import SupplierDocument
 from app.models.supplier_retention import SupplierRetention
+from app.models.supplier_contact import SupplierContact
 from app.models.catalog import Catalog
 from app.models.action import Action
 from app.models.catalog_action import CatalogAction
@@ -21,4 +22,4 @@ from app.models.requisition_retention import RequisitionRetention
 from app.models.notification import Notification
 from app.models.password_reset import PasswordReset
 
-__all__ = ["Account", "Role", "User", "AuditLog", "Project", "UserProject", "Supplier", "SupplierDocument", "SupplierRetention", "Catalog", "Action", "CatalogAction", "Category", "RolePermission", "SystemConfiguration", "Retention", "Requisition", "RequisitionItem", "RequisitionDocument", "RequisitionRetention", "Notification", "PasswordReset"]
+__all__ = ["Account", "Role", "User", "AuditLog", "Project", "UserProject", "Supplier", "SupplierDocument", "SupplierRetention", "SupplierContact", "Catalog", "Action", "CatalogAction", "Category", "RolePermission", "SystemConfiguration", "Retention", "Requisition", "RequisitionItem", "RequisitionDocument", "RequisitionRetention", "Notification", "PasswordReset"]

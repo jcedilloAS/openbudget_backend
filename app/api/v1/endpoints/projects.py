@@ -313,7 +313,7 @@ def get_projects_by_status(
 @router.post("/bulk-upload", response_model=ProjectBulkUploadResult, status_code=status.HTTP_200_OK, summary="Bulk upload projects from Excel")
 def bulk_upload_projects(
     request: Request,
-    file: UploadFile = File(..., description="Excel file (.xlsx) with columns: project_code, name"),
+    file: UploadFile = File(..., description="Excel file (.xlsx) with columns: project_code, name, initial_budget"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("projects", "create"))
 ):
@@ -323,6 +323,8 @@ def bulk_upload_projects(
     The file must contain the following columns (header row required):
     - **project_code**: Unique project code
     - **name**: Project name
+    - **initial_budget**: Initial budget amount (optional, defaults to 0.00). The
+      available_balance is set equal to this value.
 
     Returns a summary with the number of created projects, failed rows, and error details.
     """
